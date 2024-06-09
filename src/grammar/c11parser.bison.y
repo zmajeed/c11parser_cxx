@@ -342,18 +342,14 @@ void c11parser::C11Parser::error(const location& loc, const string& msg) {
 %nterm <declarator>                  direct_declarator
 
 %nterm <string>                      enumeration_constant
-%nterm <Context::State>              function_definition1
+%nterm <Context::context>            function_definition1
 %nterm <string>                      general_identifier
-%nterm <Context::State>              parameter_type_list
-%nterm <Context::State>              save_context
+%nterm <Context::context>            parameter_type_list
+%nterm <Context::context>            save_context
 %nterm <string>                      typedef_name
 %nterm <string>                      var_name
 
-%nterm <Context::State>              scoped_parameter_type_list_ 
-
-/*
-%nterm <unit>                        translation_unit_file
-*/
+%nterm <Context::context>            scoped_parameter_type_list_
 
 %precedence below_ELSE
 %precedence ELSE
