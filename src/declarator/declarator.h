@@ -52,8 +52,8 @@ struct identifier_declarator: public declarator_base {
 
 struct function_declarator: public declarator_base {
 
-  Context::State ctx;
-  explicit function_declarator(const declarator&, const Context::State&);
+  Context::context ctx;
+  explicit function_declarator(const declarator&, const Context::context&);
 
 };
 
@@ -85,7 +85,7 @@ struct declarator: variant<identifier_declarator, function_declarator, other_dec
 
 };
 
-inline function_declarator::function_declarator(const declarator& d, const Context::State& savedCtx) {
+inline function_declarator::function_declarator(const declarator& d, const Context::context& savedCtx) {
   visit(overload{
     [this, &savedCtx](const identifier_declarator& d) -> void {
       identifier = d.identifier;

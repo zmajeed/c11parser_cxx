@@ -33,9 +33,9 @@ namespace c11parser {
 using namespace std;
 
 struct Context {
-  using State = unordered_set<string>;
+  using context = unordered_set<string>;
 
-  State current;
+  context current;
 
   bool is_typedefname(const string& id) {
     return current.contains(id);
@@ -49,11 +49,11 @@ struct Context {
     current.erase(id);
   }
 
-  State save_context() {
+  context save_context() {
     return current;
   }
 
-  void restore_context(const State& snapshot) {
+  void restore_context(const context& snapshot) {
     current = snapshot;
   }
 
