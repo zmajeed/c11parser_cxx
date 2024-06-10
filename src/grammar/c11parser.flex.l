@@ -161,15 +161,13 @@ using symbol_type = C11Parser::symbol_type;
 
 %}
 
- // flex rules section
- /* only c-style comments starting at second column allowed inside rules section */
-
 %%
 
  // code appears inside yylex function at start
 
  // position in input stream
   auto& loc = param.loc;
+ // update current position to previous line and column numbers
   loc.step();
 
  // check for second half of special split token, return either NAME TYPE or NAME VARIABLE
@@ -183,6 +181,9 @@ using symbol_type = C11Parser::symbol_type;
     return isType? C11Parser::make_TYPE(loc): C11Parser::make_VARIABLE(loc);
   }
 
+ // flex rules section
+ /* only c-style comments starting at second column allowed inside rules section */
+
  // important note: see YY_USER_INIT defined above that makes input processing start in INITIAL_LINEBEGIN state not default INITIAL state
 
 <INITIAL_LINEBEGIN>{
@@ -195,6 +196,10 @@ using symbol_type = C11Parser::symbol_type;
   loc.columns(yyleng);
 }
 
+ /*
+preprocessor lines start with # or its digraph %:
+# 1 "/usr/include/stdio.h" 1 3 4
+*/
 #|%: {
   loc.columns(yyleng);
   BEGIN(HASH);
@@ -721,8 +726,8 @@ while {
 <MULTILINE_COMMENT>{
 
 "*/" {
-    BEGIN(0);
     loc.columns(yyleng);
+    BEGIN(0);
   }
 
 \n loc.lines();
@@ -738,7 +743,7 @@ while {
     BEGIN(INITIAL_LINEBEGIN);
   }
 
-  . loc.columns(yyleng);
+  .+ loc.columns(yyleng);
 
 }
 

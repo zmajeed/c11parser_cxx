@@ -154,9 +154,6 @@ struct LexParam {
 // use c++ objects, changes signature of yylex, yylex now returns PGNParser::symbol_type, yylex takes no parameters, change everywhere yylex is referenced, eg parse-param, any lambdas
 %define api.token.constructor
 
-// implicit move parameters in make_* token constructors
-//%define api.value.automove
-
 // enable c++ assert via internal YY_ASSERT to validate symbol use
 %define parse.assert
 
@@ -193,10 +190,8 @@ using namespace std;
 
 #include <string>
 #include <chrono>
-#include <fmt/format.h>
 
 using namespace std;
-using namespace fmt;
 
 namespace {
   constexpr auto defaultInputName = "inputstream"s;
@@ -215,9 +210,6 @@ void c11parser::C11Parser::error(const location& loc, const string& msg) {
   auto& loc = lexParam.loc;
 
   if(loc.begin.filename == nullptr) {
-    if(debug_level() != 0) {
-      println("bison.initial-action.1: initialize location to {}", defaultInputName);
-    }
     loc.initialize(&defaultInputName);
   }
 
@@ -225,9 +217,6 @@ void c11parser::C11Parser::error(const location& loc, const string& msg) {
     lexParam.is_typedefname = [&context = bisonParam.context](const string& id) -> bool {
       return context.is_typedefname(id);
     };
-    if(debug_level() != 0) {
-      println("bison.initial-action.2: set is_typedefname lex callback");
-    }
   }
 }
 
@@ -264,7 +253,6 @@ void c11parser::C11Parser::error(const location& loc, const string& msg) {
 %token                               ELLIPSIS                 "..."
 %token                               ELSE                     "else"
 %token                               ENUM                     "enum"
-%token                               END_OF_FILE              //"EOF"
 %token                               EQ                       "="
 %token                               EQEQ                     "=="
 %token                               EXTERN                   "extern"
@@ -359,711 +347,110 @@ void c11parser::C11Parser::error(const location& loc, const string& msg) {
 
 %%
 
-option_COMMA_:
-  
-    %empty
-| ","
-    {}
+translation_unit_file:
+  external_declaration translation_unit_file
+| external_declaration YYEOF
 
-option___anonymous_2_:
-  
-    %empty
-| "," "..."
-    {}
+external_declaration:
+  function_definition
+| declaration
 
-option_abstract_declarator_:
-  
-    %empty
-| abstract_declarator
-    {}
+function_definition: function_definition1[ctx] option_declaration_list_ compound_statement {
+  bisonParam.context.restore_context($ctx);
+}
 
-option_argument_expression_list_:
-  
-    %empty
-| argument_expression_list
-    {}
-
-option_assignment_expression_:
-  
-    %empty
-| assignment_expression
-    {}
-
-option_block_item_list_:
-  
-    %empty
-| block_item_list
-    {}
+function_definition1: declaration_specifiers declarator_varname[d] {
+  auto ctx = bisonParam.context.save_context();
+  $d.reinstall_function_context(bisonParam.context);
+  $$ = ctx;
+}
 
 option_declaration_list_:
-  
-    %empty
+  %empty
 | declaration_list
-    {}
 
-option_declarator_:
-  
-    %empty
-| declarator
-    {}
+declaration_list:
+  declaration
+| declaration_list declaration
 
-option_designation_:
-  
-    %empty
-| designation
-    {}
+declaration:
+  declaration_specifiers option_init_declarator_list_declarator_varname__ ";"
+| declaration_specifiers_typedef option_init_declarator_list_declarator_typedefname__ ";"
+| static_assert_declaration
 
-option_designator_list_:
-  
-    %empty
-| designator_list
-    {}
-
-option_direct_abstract_declarator_:
-  
-    %empty
-| direct_abstract_declarator
-    {}
-
-option_expression_:
-  
-    %empty
-| expression
-    {}
-
-option_general_identifier_:
-  
-    %empty
-| general_identifier
-    {}
-
-option_identifier_list_:
-  
-    %empty
-| identifier_list
-    {}
-
-option_init_declarator_list_declarator_typedefname__:
-  
-    %empty
-| init_declarator_list_declarator_typedefname_
-    {}
-
-option_init_declarator_list_declarator_varname__:
-  
-    %empty
-| init_declarator_list_declarator_varname_
-    {}
-
-option_pointer_:
-  
-    %empty
-| pointer
-    {}
-
-option_scoped_parameter_type_list__:
-  
-    %empty
-| scoped_parameter_type_list_
-    {}
-
-option_struct_declarator_list_:
-  
-    %empty
-| struct_declarator_list
-    {}
-
-option_type_qualifier_list_:
-  
-    %empty
-| type_qualifier_list
-    {}
-
-list___anonymous_0_:
-  
-    %empty
-| type_qualifier list___anonymous_0_
-    {}
-| alignment_specifier list___anonymous_0_
-    {}
-
-list___anonymous_1_:
-  
-    %empty
-| type_qualifier list___anonymous_1_
-    {}
-| alignment_specifier list___anonymous_1_
-    {}
-
-list_declaration_specifier_:
-  
-    %empty
-| declaration_specifier list_declaration_specifier_
-    {}
-
-list_eq1_TYPEDEF_declaration_specifier_:
-"typedef" list_declaration_specifier_
-    {}
-| declaration_specifier list_eq1_TYPEDEF_declaration_specifier_
-    {}
-
-list_eq1_type_specifier_unique___anonymous_0_:
-  type_specifier_unique list___anonymous_0_
-    {}
-| type_qualifier list_eq1_type_specifier_unique___anonymous_0_
-    {}
-| alignment_specifier list_eq1_type_specifier_unique___anonymous_0_
-    {}
+declaration_specifiers:
+  list_eq1_type_specifier_unique_declaration_specifier_
+| list_ge1_type_specifier_nonunique_declaration_specifier_
 
 list_eq1_type_specifier_unique_declaration_specifier_:
   type_specifier_unique list_declaration_specifier_
-    {}
 | declaration_specifier list_eq1_type_specifier_unique_declaration_specifier_
-    {}
-
-list_ge1_type_specifier_nonunique___anonymous_1_:
-  type_specifier_nonunique list___anonymous_1_
-    {}
-| type_specifier_nonunique list_ge1_type_specifier_nonunique___anonymous_1_
-    {}
-| type_qualifier list_ge1_type_specifier_nonunique___anonymous_1_
-    {}
-| alignment_specifier list_ge1_type_specifier_nonunique___anonymous_1_
-    {}
 
 list_ge1_type_specifier_nonunique_declaration_specifier_:
   type_specifier_nonunique list_declaration_specifier_
-    {}
 | type_specifier_nonunique list_ge1_type_specifier_nonunique_declaration_specifier_
-    {}
 | declaration_specifier list_ge1_type_specifier_nonunique_declaration_specifier_
-    {}
+
+option_init_declarator_list_declarator_varname__:
+  %empty
+| init_declarator_list_declarator_varname_
+
+declaration_specifiers_typedef:
+  list_eq1_eq1_TYPEDEF_type_specifier_unique_declaration_specifier_
+| list_eq1_ge1_TYPEDEF_type_specifier_nonunique_declaration_specifier_
 
 list_eq1_eq1_TYPEDEF_type_specifier_unique_declaration_specifier_:
-"typedef" list_eq1_type_specifier_unique_declaration_specifier_
-    {}
+  "typedef" list_eq1_type_specifier_unique_declaration_specifier_
 | type_specifier_unique list_eq1_TYPEDEF_declaration_specifier_
-    {}
 | declaration_specifier list_eq1_eq1_TYPEDEF_type_specifier_unique_declaration_specifier_
-    {}
 
 list_eq1_ge1_TYPEDEF_type_specifier_nonunique_declaration_specifier_:
-"typedef" list_ge1_type_specifier_nonunique_declaration_specifier_
-    {}
+  "typedef" list_ge1_type_specifier_nonunique_declaration_specifier_
 | type_specifier_nonunique list_eq1_TYPEDEF_declaration_specifier_
-    {}
 | type_specifier_nonunique list_eq1_ge1_TYPEDEF_type_specifier_nonunique_declaration_specifier_
-    {}
 | declaration_specifier list_eq1_ge1_TYPEDEF_type_specifier_nonunique_declaration_specifier_
-    {}
 
-typedef_name: NAME[i] TYPE {
-  $$ = $i;
-  if(debug_level() != 0) {
-    println("bison.rule_50: typedef_name: NAME[i] TYPE, $$ {} i {}", $$, $i);
-  }
-}
-;
+option_init_declarator_list_declarator_typedefname__:
+  %empty
+| init_declarator_list_declarator_typedefname_
 
-var_name: NAME[i] VARIABLE {
-  $$ = $i;
-  if(debug_level() != 0) {
-    println("bison.rule_52: var_name: NAME[i] VARIABLE, $$ {} i {}", $$, $i);
-  }
-}
-;
+init_declarator_list_declarator_typedefname_:
+  init_declarator_declarator_typedefname_
+| init_declarator_list_declarator_typedefname_ "," init_declarator_declarator_typedefname_
 
-typedef_name_spec:
-  typedef_name
-    {}
+init_declarator_list_declarator_varname_:
+  init_declarator_declarator_varname_
+| init_declarator_list_declarator_varname_ "," init_declarator_declarator_varname_
 
-general_identifier: typedef_name[i] {
-  $$ = $i;
-  if(debug_level() != 0) {
-    println("bison.rule_70: general_identifier: typedef_name[i], $$ {} i {}", $$, $i);
-  }
-}
-| var_name[i] {
-  $$ = $i;
-  if(debug_level() != 0) {
-    println("bison.rule_72: general_identifier: var_name[i], $$ {} i {}", $$, $i);
-  }
-}
-;
+init_declarator_declarator_typedefname_:
+  declarator_typedefname
+| declarator_typedefname "=" c_initializer
 
-save_context: %empty {
-  $$ = bisonParam.context.save_context();
-}
-;
-
-scoped_compound_statement_: save_context[ctx] compound_statement {
-  bisonParam.context.restore_context($ctx);
-}
-;
-
-scoped_iteration_statement_: save_context[ctx] iteration_statement {
-  bisonParam.context.restore_context($ctx);
-}
-;
-
-scoped_parameter_type_list_: save_context[ctx] parameter_type_list[x] {
-  bisonParam.context.restore_context($ctx);
-  $$ = $x;
-}
-;
-
-scoped_selection_statement_: save_context[ctx] selection_statement {
-  bisonParam.context.restore_context($ctx);
-}
-;
-
-scoped_statement_: save_context[ctx] statement {
-  bisonParam.context.restore_context($ctx);
-}
-;
+init_declarator_declarator_varname_:
+  declarator_varname
+| declarator_varname "=" c_initializer
 
 declarator_varname: declarator[d] {
   bisonParam.context.declare_varname($d.identifier());
-  $$ = $d;
+  $$ = move($d);
 }
 ;
 
 declarator_typedefname: declarator[d] {
   bisonParam.context.declare_typedefname($d.identifier());
-  $$ = $d;
+  $$ = move($d);
 }
 ;
 
-primary_expression:
-  var_name
-    {}
-| CONSTANT
-    {}
-| STRING_LITERAL
-    {}
-| "(" expression ")"
-    {}
-| generic_selection
-    {}
-
-generic_selection:
-"_Generic" "(" assignment_expression "," generic_assoc_list ")"
-    {}
-
-generic_assoc_list:
-  generic_association
-    {}
-| generic_assoc_list "," generic_association
-    {}
-
-generic_association:
-type_name ":" assignment_expression
-    {}
-| "default" ":" assignment_expression
-    {}
-
-postfix_expression:
-  primary_expression
-    {}
-| postfix_expression "[" expression "]"
-    {}
-| postfix_expression "(" option_argument_expression_list_ ")"
-    {}
-| postfix_expression "." general_identifier
-    {}
-| postfix_expression "->" general_identifier
-    {}
-| postfix_expression "++"
-    {}
-| postfix_expression "--"
-    {}
-| "(" type_name ")" "{" initializer_list option_COMMA_ "}"
-    {}
-
-argument_expression_list:
-  assignment_expression
-    {}
-| argument_expression_list "," assignment_expression
-    {}
-
-unary_expression:
-  postfix_expression
-    {}
-| "++" unary_expression
-    {}
-| "--" unary_expression
-    {}
-| unary_operator cast_expression
-    {}
-| "sizeof" unary_expression
-    {}
-| "sizeof" "(" type_name ")"
-    {}
-| "_Alignof" "(" type_name ")"
-    {}
-
-unary_operator:
-"&"
-    {}
-| "*"
-    {}
-| "+"
-    {}
-| "-"
-    {}
-| "~"
-    {}
-| "!"
-    {}
-
-cast_expression:
-  unary_expression
-    {}
-| "(" type_name ")" cast_expression
-    {}
-
-multiplicative_operator:
-"*"
-    {}
-| "/"
-    {}
-| "%"
-    {}
-
-multiplicative_expression:
-  cast_expression
-    {}
-| multiplicative_expression multiplicative_operator cast_expression
-    {}
-
-additive_operator:
-"+"
-    {}
-| "-"
-    {}
-
-additive_expression:
-  multiplicative_expression
-    {}
-| additive_expression additive_operator multiplicative_expression
-    {}
-
-shift_operator:
-"<<"
-    {}
-| ">>"
-    {}
-
-shift_expression:
-  additive_expression
-    {}
-| shift_expression shift_operator additive_expression
-    {}
-
-relational_operator:
-"<"
-    {}
-| ">"
-    {}
-| "<="
-    {}
-| ">="
-    {}
-
-relational_expression:
-  shift_expression
-    {}
-| relational_expression relational_operator shift_expression
-    {}
-
-equality_operator:
-"=="
-    {}
-| "!="
-    {}
-
-equality_expression:
-  relational_expression
-    {}
-| equality_expression equality_operator relational_expression
-    {}
-
-and_expression:
-  equality_expression
-    {}
-| and_expression "&" equality_expression
-    {}
-
-exclusive_or_expression:
-  and_expression
-    {}
-| exclusive_or_expression "^" and_expression
-    {}
-
-inclusive_or_expression:
-  exclusive_or_expression
-    {}
-| inclusive_or_expression "|" exclusive_or_expression
-    {}
-
-logical_and_expression:
-  inclusive_or_expression
-    {}
-| logical_and_expression "&&" inclusive_or_expression
-    {}
-
-logical_or_expression:
-  logical_and_expression
-    {}
-| logical_or_expression "||" logical_and_expression
-    {}
-
-conditional_expression:
-  logical_or_expression
-    {}
-| logical_or_expression "?" expression ":" conditional_expression
-    {}
-
-assignment_expression:
-  conditional_expression
-    {}
-| unary_expression assignment_operator assignment_expression
-    {}
-
-assignment_operator:
-"="
-    {}
-| "*="
-    {}
-| "/="
-    {}
-| "%="
-    {}
-| "+="
-    {}
-| "-="
-    {}
-| "<<="
-    {}
-| ">>="
-    {}
-| "&="
-    {}
-| "^="
-    {}
-| "|="
-    {}
-
-expression:
-  assignment_expression
-    {}
-| expression "," assignment_expression
-    {}
-
-constant_expression:
-  conditional_expression
-    {}
-
-declaration:
-declaration_specifiers option_init_declarator_list_declarator_varname__ ";"
-    {}
-| declaration_specifiers_typedef option_init_declarator_list_declarator_typedefname__ ";"
-    {}
-| static_assert_declaration
-    {}
-
-declaration_specifier:
-  storage_class_specifier
-    {}
-| type_qualifier
-    {}
-| function_specifier
-    {}
-| alignment_specifier
-    {}
-
-declaration_specifiers:
-  list_eq1_type_specifier_unique_declaration_specifier_
-    {}
-| list_ge1_type_specifier_nonunique_declaration_specifier_
-    {}
-
-declaration_specifiers_typedef:
-  list_eq1_eq1_TYPEDEF_type_specifier_unique_declaration_specifier_
-    {}
-| list_eq1_ge1_TYPEDEF_type_specifier_nonunique_declaration_specifier_
-    {}
-
-init_declarator_list_declarator_typedefname_:
-  init_declarator_declarator_typedefname_
-    {}
-| init_declarator_list_declarator_typedefname_ "," init_declarator_declarator_typedefname_
-    {}
-
-init_declarator_list_declarator_varname_:
-  init_declarator_declarator_varname_
-    {}
-| init_declarator_list_declarator_varname_ "," init_declarator_declarator_varname_
-    {}
-
-init_declarator_declarator_typedefname_:
-  declarator_typedefname
-    {}
-| declarator_typedefname "=" c_initializer
-    {}
-
-init_declarator_declarator_varname_:
-  declarator_varname
-    {}
-| declarator_varname "=" c_initializer
-    {}
-
-storage_class_specifier:
-"extern"
-    {}
-| "static"
-    {}
-| "_Thread_local"
-    {}
-| "auto"
-    {}
-| "register"
-    {}
-
-type_specifier_nonunique:
-"char"
-    {}
-| "short"
-    {}
-| "int"
-    {}
-| "long"
-    {}
-| "float"
-    {}
-| "double"
-    {}
-| "signed"
-    {}
-| "unsigned"
-    {}
-| "_Complex"
-    {}
-| "_Imaginary" {}
-
-type_specifier_unique:
-"void"
-    {}
-| "_Bool"
-    {}
-| atomic_type_specifier
-    {}
-| struct_or_union_specifier
-    {}
-| enum_specifier
-    {}
-| typedef_name_spec
-    {}
-
-struct_or_union_specifier:
-struct_or_union option_general_identifier_ "{" struct_declaration_list "}"
-    {}
-| struct_or_union general_identifier
-    {}
-
-struct_or_union:
-"struct"
-    {}
-| "union"
-    {}
-
-struct_declaration_list:
-  struct_declaration
-    {}
-| struct_declaration_list struct_declaration
-    {}
-
-struct_declaration:
-specifier_qualifier_list option_struct_declarator_list_ ";"
-    {}
-| static_assert_declaration
-    {}
-
-specifier_qualifier_list:
-  list_eq1_type_specifier_unique___anonymous_0_
-    {}
-| list_ge1_type_specifier_nonunique___anonymous_1_
-    {}
-
-struct_declarator_list:
-  struct_declarator
-    {}
-| struct_declarator_list "," struct_declarator
-    {}
-
-struct_declarator:
-  declarator
-    {}
-| option_declarator_ ":" constant_expression
-    {}
-
-enum_specifier:
-"enum" option_general_identifier_ "{" enumerator_list option_COMMA_ "}"
-    {}
-| "enum" general_identifier
-    {}
-
-enumerator_list:
-  enumerator
-    {}
-| enumerator_list "," enumerator
-    {}
-
-enumerator: enumeration_constant[i] {
-  bisonParam.context.declare_varname($i);
-}
-| enumeration_constant[i] "=" constant_expression {
-  bisonParam.context.declare_varname($i);
-}
-;
-
-enumeration_constant: general_identifier[i] {
-  $$ = $i;
-}
-
-atomic_type_specifier:
-"_Atomic" "(" type_name ")"
-    {}
-| "_Atomic" ATOMIC_LPAREN type_name ")"
-    {}
-
-type_qualifier:
-"const"
-    {}
-| "restrict"
-    {}
-| "volatile"
-    {}
-| "_Atomic"
-    {}
-
-function_specifier:
-"inline"
-    {}
-| "_Noreturn"
-    {}
-
-alignment_specifier:
-"_Alignas" "(" type_name ")"
-    {}
-| "_Alignas" "(" constant_expression ")"
-    {}
+option_declarator_:
+  %empty
+| declarator
 
 declarator: direct_declarator[d] {
-  $$ = $d;
+  $$ = move($d);
 }
 | pointer direct_declarator[d] {
-  $$ = $d;
+  $$ = move($d);
 }
 ;
 
@@ -1071,7 +458,7 @@ direct_declarator: general_identifier[i] {
   $$ = identifier_declarator{$i};
 }
 | "(" save_context declarator[d] ")" {
-  $$ = $d;
+  $$ = move($d);
 }
 | direct_declarator[d] "[" option_type_qualifier_list_ option_assignment_expression_ "]" {
   $$ = other_declarator($d);
@@ -1093,192 +480,500 @@ direct_declarator: general_identifier[i] {
 }
 ;
 
+option_type_qualifier_list_:
+  %empty
+| type_qualifier_list
+
+scoped_parameter_type_list_: save_context[ctx] parameter_type_list[x] {
+  bisonParam.context.restore_context($ctx);
+  $$ = move($x);
+}
+;
+
+static_assert_declaration:
+  "_Static_assert" "(" constant_expression "," STRING_LITERAL ")" ";"
+
+declaration_specifier:
+  storage_class_specifier
+| type_qualifier
+| function_specifier
+| alignment_specifier
+
+storage_class_specifier:
+  "extern"
+| "static"
+| "_Thread_local"
+| "auto"
+| "register"
+
+type_qualifier:
+  "const"
+| "restrict"
+| "volatile"
+| "_Atomic"
+
+function_specifier:
+  "inline"
+| "_Noreturn"
+
+alignment_specifier:
+  "_Alignas" "(" type_name ")"
+| "_Alignas" "(" constant_expression ")"
+
+compound_statement:
+  "{" option_block_item_list_ "}"
+
+option_block_item_list_:
+  %empty
+| block_item_list
+
+block_item_list:
+  option_block_item_list_ block_item
+
+block_item:
+  declaration
+| statement
+
+statement:
+  labeled_statement
+| scoped_compound_statement_
+| expression_statement
+| scoped_selection_statement_
+| scoped_iteration_statement_
+| jump_statement
+
+labeled_statement:
+  general_identifier ":" statement
+| "case" constant_expression ":" statement
+| "default" ":" statement
+
+scoped_compound_statement_: save_context[ctx] compound_statement {
+  bisonParam.context.restore_context($ctx);
+}
+;
+
+expression_statement:
+  option_expression_ ";"
+
+option_expression_:
+  %empty
+| expression
+
+scoped_selection_statement_: save_context[ctx] selection_statement {
+  bisonParam.context.restore_context($ctx);
+}
+;
+
+scoped_iteration_statement_: save_context[ctx] iteration_statement {
+  bisonParam.context.restore_context($ctx);
+}
+;
+
+jump_statement:
+  "goto" general_identifier ";"
+| "continue" ";"
+| "break" ";"
+| "return" option_expression_ ";"
+
+selection_statement:
+  "if" "(" expression ")" scoped_statement_ "else" scoped_statement_
+| "if" "(" expression ")" scoped_statement_ %prec below_ELSE
+| "switch" "(" expression ")" scoped_statement_
+
+iteration_statement:
+  "while" "(" expression ")" scoped_statement_
+| "do" scoped_statement_ "while" "(" expression ")" ";"
+| "for" "(" option_expression_ ";" option_expression_ ";" option_expression_ ")" scoped_statement_
+| "for" "(" declaration option_expression_ ";" option_expression_ ")" scoped_statement_
+
+scoped_statement_: save_context[ctx] statement {
+  bisonParam.context.restore_context($ctx);
+}
+;
+
+option_direct_abstract_declarator_:
+  %empty
+| direct_abstract_declarator
+
+option_scoped_parameter_type_list__:
+  %empty
+| scoped_parameter_type_list_
+
+list___anonymous_0_:
+  %empty
+| type_qualifier list___anonymous_0_
+| alignment_specifier list___anonymous_0_
+
+list___anonymous_1_:
+  %empty
+| type_qualifier list___anonymous_1_
+| alignment_specifier list___anonymous_1_
+
+list_declaration_specifier_:
+  %empty
+| declaration_specifier list_declaration_specifier_
+
+list_eq1_TYPEDEF_declaration_specifier_:
+  "typedef" list_declaration_specifier_
+| declaration_specifier list_eq1_TYPEDEF_declaration_specifier_
+
+list_eq1_type_specifier_unique___anonymous_0_:
+  type_specifier_unique list___anonymous_0_
+| type_qualifier list_eq1_type_specifier_unique___anonymous_0_
+| alignment_specifier list_eq1_type_specifier_unique___anonymous_0_
+
+list_ge1_type_specifier_nonunique___anonymous_1_:
+  type_specifier_nonunique list___anonymous_1_
+| type_specifier_nonunique list_ge1_type_specifier_nonunique___anonymous_1_
+| type_qualifier list_ge1_type_specifier_nonunique___anonymous_1_
+| alignment_specifier list_ge1_type_specifier_nonunique___anonymous_1_
+
+option_general_identifier_:
+  %empty
+| general_identifier
+
+// CAUTION keep typedef_name_spec and general_identifier rules together with typedef_name_spec above general_identifier
+// this is required for the desired resolution of 3 reduce-reduce conflicts involving these two rules based on bison's default reduction using the earlier occurring rule
+// see the bison report generated in the build for more details
+typedef_name_spec:
+  typedef_name
+
+general_identifier: typedef_name[i] {
+  $$ = move($i);
+}
+| var_name[i] {
+  $$ = move($i);
+}
+;
+
+typedef_name: NAME[i] TYPE {
+  $$ = move($i);
+}
+;
+
+var_name: NAME[i] VARIABLE {
+  $$ = move($i);
+}
+;
+
+unary_expression:
+  postfix_expression
+| "++" unary_expression
+| "--" unary_expression
+| unary_operator cast_expression
+| "sizeof" unary_expression
+| "sizeof" "(" type_name ")"
+| "_Alignof" "(" type_name ")"
+
+unary_operator:
+  "&"
+| "*"
+| "+"
+| "-"
+| "~"
+| "!"
+
+postfix_expression:
+  primary_expression
+| postfix_expression "[" expression "]"
+| postfix_expression "(" option_argument_expression_list_ ")"
+| postfix_expression "." general_identifier
+| postfix_expression "->" general_identifier
+| postfix_expression "++"
+| postfix_expression "--"
+| "(" type_name ")" "{" initializer_list option_COMMA_ "}"
+
+primary_expression:
+  var_name
+| CONSTANT
+| STRING_LITERAL
+| "(" expression ")"
+| generic_selection
+
+expression:
+  assignment_expression
+| expression "," assignment_expression
+
+option_argument_expression_list_:
+  %empty
+| argument_expression_list
+
+argument_expression_list:
+  assignment_expression
+| argument_expression_list "," assignment_expression
+
+generic_selection:
+"_Generic" "(" assignment_expression "," generic_assoc_list ")"
+
+generic_assoc_list:
+  generic_association
+| generic_assoc_list "," generic_association
+
+generic_association:
+  type_name ":" assignment_expression
+| "default" ":" assignment_expression
+
+cast_expression:
+  unary_expression
+| "(" type_name ")" cast_expression
+
+additive_expression:
+  multiplicative_expression
+| additive_expression additive_operator multiplicative_expression
+
+additive_operator:
+  "+"
+| "-"
+
+multiplicative_expression:
+  cast_expression
+| multiplicative_expression multiplicative_operator cast_expression
+
+multiplicative_operator:
+  "*"
+| "/"
+| "%"
+
+relational_expression:
+  shift_expression
+| relational_expression relational_operator shift_expression
+
+relational_operator:
+  "<"
+| ">"
+| "<="
+| ">="
+
+shift_expression:
+  additive_expression
+| shift_expression shift_operator additive_expression
+
+shift_operator:
+  "<<"
+| ">>"
+
+constant_expression:
+  conditional_expression
+
+conditional_expression:
+  logical_or_expression
+| logical_or_expression "?" expression ":" conditional_expression
+
+logical_or_expression:
+  logical_and_expression
+| logical_or_expression "||" logical_and_expression
+
+logical_and_expression:
+  inclusive_or_expression
+| logical_and_expression "&&" inclusive_or_expression
+
+inclusive_or_expression:
+  exclusive_or_expression
+| inclusive_or_expression "|" exclusive_or_expression
+
+exclusive_or_expression:
+  and_expression
+| exclusive_or_expression "^" and_expression
+
+and_expression:
+  equality_expression
+| and_expression "&" equality_expression
+
+equality_expression:
+  relational_expression
+| equality_expression equality_operator relational_expression
+
+equality_operator:
+  "=="
+| "!="
+
+option_assignment_expression_:
+  %empty
+| assignment_expression
+
+assignment_expression:
+  conditional_expression
+| unary_expression assignment_operator assignment_expression
+
+assignment_operator:
+  "="
+| "*="
+| "/="
+| "%="
+| "+="
+| "-="
+| "<<="
+| ">>="
+| "&="
+| "^="
+| "|="
+
+type_specifier_nonunique:
+  "char"
+| "short"
+| "int"
+| "long"
+| "float"
+| "double"
+| "signed"
+| "unsigned"
+| "_Complex"
+| "_Imaginary"
+
+type_specifier_unique:
+  "void"
+| "_Bool"
+| atomic_type_specifier
+| struct_or_union_specifier
+| enum_specifier
+| typedef_name_spec
+
+struct_or_union_specifier:
+  struct_or_union option_general_identifier_ "{" struct_declaration_list "}"
+| struct_or_union general_identifier
+
+struct_or_union:
+  "struct"
+| "union"
+
+struct_declaration_list:
+  struct_declaration
+| struct_declaration_list struct_declaration
+
+struct_declaration:
+  specifier_qualifier_list option_struct_declarator_list_ ";"
+| static_assert_declaration
+
+specifier_qualifier_list:
+  list_eq1_type_specifier_unique___anonymous_0_
+| list_ge1_type_specifier_nonunique___anonymous_1_
+
+option_struct_declarator_list_:
+  %empty
+| struct_declarator_list
+
+struct_declarator_list:
+  struct_declarator
+| struct_declarator_list "," struct_declarator
+
+struct_declarator:
+  declarator
+| option_declarator_ ":" constant_expression
+
+enum_specifier:
+  "enum" option_general_identifier_ "{" enumerator_list option_COMMA_ "}"
+| "enum" general_identifier
+
+enumerator_list:
+  enumerator
+| enumerator_list "," enumerator
+
+enumerator: enumeration_constant[i] {
+  bisonParam.context.declare_varname($i);
+}
+| enumeration_constant[i] "=" constant_expression {
+  bisonParam.context.declare_varname($i);
+}
+;
+
+enumeration_constant: general_identifier[i] {
+  $$ = move($i);
+}
+
+atomic_type_specifier:
+  "_Atomic" "(" type_name ")"
+| "_Atomic" ATOMIC_LPAREN type_name ")"
+
 pointer:
-"*" option_type_qualifier_list_ option_pointer_
-    {}
+  "*" option_type_qualifier_list_ option_pointer_
+
+option_pointer_: %empty | pointer
 
 type_qualifier_list:
   option_type_qualifier_list_ type_qualifier
-    {}
 
 parameter_type_list: parameter_list option___anonymous_2_ save_context[ctx] {
-  $$ = $ctx;
+  $$ = move($ctx);
 }
 
 parameter_list:
   parameter_declaration
-    {}
 | parameter_list "," parameter_declaration
-    {}
 
 parameter_declaration:
   declaration_specifiers declarator_varname
-    {}
 | declaration_specifiers option_abstract_declarator_
-    {}
+
+option_identifier_list_:
+  %empty
+| identifier_list
 
 identifier_list:
   var_name
-    {}
 | identifier_list "," var_name
-    {}
 
 type_name:
   specifier_qualifier_list option_abstract_declarator_
-    {}
+
+option_abstract_declarator_:
+  %empty
+| abstract_declarator
 
 abstract_declarator:
   pointer
-    {}
 | direct_abstract_declarator
-    {}
 | pointer direct_abstract_declarator
-    {}
 
 direct_abstract_declarator:
-"(" save_context abstract_declarator ")"
-    {}
+  "(" save_context abstract_declarator ")"
 | option_direct_abstract_declarator_ "[" option_assignment_expression_ "]"
-    {}
 | option_direct_abstract_declarator_ "[" type_qualifier_list option_assignment_expression_ "]"
-    {}
 | option_direct_abstract_declarator_ "[" "static" option_type_qualifier_list_ assignment_expression "]"
-    {}
 | option_direct_abstract_declarator_ "[" type_qualifier_list "static" assignment_expression "]"
-    {}
 | option_direct_abstract_declarator_ "[" "*" "]"
-    {}
 | "(" option_scoped_parameter_type_list__ ")"
-    {}
 | direct_abstract_declarator "(" option_scoped_parameter_type_list__ ")"
-    {}
-
-c_initializer:
-  assignment_expression
-    {}
-| "{" initializer_list option_COMMA_ "}"
-    {}
 
 initializer_list:
   option_designation_ c_initializer
-    {}
 | initializer_list "," option_designation_ c_initializer
-    {}
+
+option_designation_:
+  %empty
+| designation
 
 designation:
-designator_list "="
-    {}
+  designator_list "="
 
 designator_list:
   option_designator_list_ designator
-    {}
+
+option_designator_list_:
+  %empty
+| designator_list
 
 designator:
-"[" constant_expression "]"
-    {}
+  "[" constant_expression "]"
 | "." general_identifier
-    {}
 
-static_assert_declaration:
-"_Static_assert" "(" constant_expression "," STRING_LITERAL ")" ";"
-    {}
+c_initializer:
+  assignment_expression
+| "{" initializer_list option_COMMA_ "}"
 
-statement:
-  labeled_statement
-    {}
-| scoped_compound_statement_
-    {}
-| expression_statement
-    {}
-| scoped_selection_statement_
-    {}
-| scoped_iteration_statement_
-    {}
-| jump_statement
-    {}
+option_COMMA_:
+  %empty
+| ","
 
-labeled_statement:
-general_identifier ":" statement
-    {}
-| "case" constant_expression ":" statement
-    {}
-| "default" ":" statement
-    {}
+option___anonymous_2_:
+  %empty
+| "," "..."
 
-compound_statement:
-"{" option_block_item_list_ "}"
-    {}
+// midrule actions
 
-block_item_list:
-  option_block_item_list_ block_item
-    {}
-
-block_item:
-  declaration
-    {}
-| statement
-    {}
-
-expression_statement:
-option_expression_ ";"
-    {}
-
-selection_statement:
-"if" "(" expression ")" scoped_statement_ "else" scoped_statement_
-    {}
-| "if" "(" expression ")" scoped_statement_ %prec below_ELSE
-    {}
-| "switch" "(" expression ")" scoped_statement_
-    {}
-
-iteration_statement:
-"while" "(" expression ")" scoped_statement_
-    {}
-| "do" scoped_statement_ "while" "(" expression ")" ";"
-    {}
-| "for" "(" option_expression_ ";" option_expression_ ";" option_expression_ ")" scoped_statement_
-    {}
-| "for" "(" declaration option_expression_ ";" option_expression_ ")" scoped_statement_
-    {}
-
-jump_statement:
-"goto" general_identifier ";"
-    {}
-| "continue" ";"
-    {}
-| "break" ";"
-    {}
-| "return" option_expression_ ";"
-    {}
-
-translation_unit_file:
-  external_declaration translation_unit_file
-    {}
-//| external_declaration "EOF"
-| external_declaration
-    {}
-
-external_declaration:
-  function_definition
-    {}
-| declaration
-    {}
-
-function_definition1: declaration_specifiers declarator_varname[d] {
-  auto ctx = bisonParam.context.save_context();
-  $d.reinstall_function_context(bisonParam.context);
-  $$ = ctx;
+save_context: %empty {
+  $$ = bisonParam.context.save_context();
 }
-
-function_definition: function_definition1[ctx] option_declaration_list_ compound_statement {
-  bisonParam.context.restore_context($ctx);
-}
-
-declaration_list:
-  declaration
-    {}
-| declaration_list declaration
-    {}
+;
 
 %%
 
@@ -1357,11 +1052,6 @@ int main(int argc, char* argv[])
 
   lexer.set_debug(debug);
   parser.set_debug_level(debug);
-
-  if(auto ev = parser(); ev != 0) {
-    printf("parse failed\n");
-    return ev;
-  }
 
   if(auto ev = parser(); ev != 0) {
     fputs("parse failed\n", stderr);
