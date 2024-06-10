@@ -1087,7 +1087,7 @@ void f(int(x), int(T), int T);
   bisonParam,
   lexParam);
 
-  EXPECT_EQ(parser(), 0);
+  EXPECT_EQ(parser(), 0) << "test will fail if typedef_name_spec and general_identifier rules are not kept in this respective order in bison grammar";
 }
 
 TEST(C11Parser, 470_parameter_declaration_ambiguity_test) {
