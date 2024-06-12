@@ -56,7 +56,6 @@ SOFTWARE.
 
  // flex start conditions ie states
 
-%x S_IDENT
 %x INITIAL_LINEBEGIN
 %x MULTILINE_COMMENT
 %x SINGLELINE_COMMENT
@@ -147,17 +146,14 @@ escape_sequence {simple_escape_sequence}|{octal_escape_sequence}|{hexadecimal_es
 
 // fix flex error could not convert 0 from int to symbol_type for #define YY_NULL 0
 // caused by turning on bison %locations because symbol_type no longer has single int constructor for implicit conversion
-#define yyterminate() return symbol_type(YY_NULL, loc)
+#define yyterminate() return checkToken(C11Parser::symbol_type(YY_NULL, loc))
 
-// start out input in INITIAL_LINEBEGIN state
+// start processing input in INITIAL_LINEBEGIN state instead of default INITIAL state
 #define YY_USER_INIT BEGIN(INITIAL_LINEBEGIN);
 
 using namespace std;
 using namespace fmt;
 using namespace c11parser;
-
-// needed for custom yyterminate
-using symbol_type = C11Parser::symbol_type;
 
 %}
 
@@ -171,12 +167,9 @@ using symbol_type = C11Parser::symbol_type;
   loc.step();
 
  // check for second half of special split token, return either NAME TYPE or NAME VARIABLE
-  if(YY_START == S_IDENT) {
-    BEGIN(0);
+  if(lexer_state == lexer_state::SIdent) {
+    lexer_state = lexer_state::SRegular;
     auto isType = param.is_typedefname(identifierToLookup);
-    if(debug() != 0) {
-      println("yylex.entry_name_lookup: identifierToLookup {} isType {}", identifierToLookup, isType);
-    }
     identifierToLookup.clear();
     return isType? C11Parser::make_TYPE(loc): C11Parser::make_VARIABLE(loc);
   }
@@ -235,17 +228,17 @@ preprocessor lines start with # or its digraph %:
 
 {integer_constant} {
   loc.columns(yyleng);
-  return C11Parser::make_CONSTANT(loc);
+  return checkToken(C11Parser::make_CONSTANT(loc));
 }
 
 {decimal_floating_constant} {
   loc.columns(yyleng);
-  return C11Parser::make_CONSTANT(loc);
+  return checkToken(C11Parser::make_CONSTANT(loc));
 }
 
 {hexadecimal_floating_constant} {
   loc.columns(yyleng);
-  return C11Parser::make_CONSTANT(loc);
+  return checkToken(C11Parser::make_CONSTANT(loc));
 }
 
 {preprocessing_number} {
@@ -255,461 +248,459 @@ preprocessor lines start with # or its digraph %:
 
 "..." {
   loc.columns(yyleng);
-  return C11Parser::make_ELLIPSIS(loc);
+  return checkToken(C11Parser::make_ELLIPSIS(loc));
 }
 
 "+=" {
   loc.columns(yyleng);
-  return C11Parser::make_ADD_ASSIGN(loc);
+  return checkToken(C11Parser::make_ADD_ASSIGN(loc));
 }
 
 -= {
   loc.columns(yyleng);
-  return C11Parser::make_SUB_ASSIGN(loc);
+  return checkToken(C11Parser::make_SUB_ASSIGN(loc));
 }
 
 "*=" {
   loc.columns(yyleng);
-  return C11Parser::make_MUL_ASSIGN(loc);
+  return checkToken(C11Parser::make_MUL_ASSIGN(loc));
 }
 
 "/=" {
   loc.columns(yyleng);
-  return C11Parser::make_DIV_ASSIGN(loc);
+  return checkToken(C11Parser::make_DIV_ASSIGN(loc));
 }
 
 %= {
   loc.columns(yyleng);
-  return C11Parser::make_MOD_ASSIGN(loc);
+  return checkToken(C11Parser::make_MOD_ASSIGN(loc));
 }
 
 "|=" {
   loc.columns(yyleng);
-  return C11Parser::make_OR_ASSIGN(loc);
+  return checkToken(C11Parser::make_OR_ASSIGN(loc));
 }
 
 &= {
   loc.columns(yyleng);
-  return C11Parser::make_AND_ASSIGN(loc);
+  return checkToken(C11Parser::make_AND_ASSIGN(loc));
 }
 
 "^=" {
   loc.columns(yyleng);
-  return C11Parser::make_XOR_ASSIGN(loc);
+  return checkToken(C11Parser::make_XOR_ASSIGN(loc));
 }
 
 "<<=" {
   loc.columns(yyleng);
-  return C11Parser::make_LEFT_ASSIGN(loc);
+  return checkToken(C11Parser::make_LEFT_ASSIGN(loc));
 }
 
 >>= {
   loc.columns(yyleng);
-  return C11Parser::make_RIGHT_ASSIGN(loc);
+  return checkToken(C11Parser::make_RIGHT_ASSIGN(loc));
 }
 
 "<<" {
   loc.columns(yyleng);
-  return C11Parser::make_LEFT(loc);
+  return checkToken(C11Parser::make_LEFT(loc));
 }
 
 >> {
   loc.columns(yyleng);
-  return C11Parser::make_RIGHT(loc);
+  return checkToken(C11Parser::make_RIGHT(loc));
 }
 
 == {
   loc.columns(yyleng);
-  return C11Parser::make_EQEQ(loc);
+  return checkToken(C11Parser::make_EQEQ(loc));
 }
 
 != {
   loc.columns(yyleng);
-  return C11Parser::make_NEQ(loc);
+  return checkToken(C11Parser::make_NEQ(loc));
 }
 
 "<=" {
   loc.columns(yyleng);
-  return C11Parser::make_LEQ(loc);
+  return checkToken(C11Parser::make_LEQ(loc));
 }
 
 >= {
   loc.columns(yyleng);
-  return C11Parser::make_GEQ(loc);
+  return checkToken(C11Parser::make_GEQ(loc));
 }
 
 = {
   loc.columns(yyleng);
-  return C11Parser::make_EQ(loc);
+  return checkToken(C11Parser::make_EQ(loc));
 }
 
 "<" {
   loc.columns(yyleng);
-  return C11Parser::make_LT(loc);
+  return checkToken(C11Parser::make_LT(loc));
 }
 
 > {
   loc.columns(yyleng);
-  return C11Parser::make_GT(loc);
+  return checkToken(C11Parser::make_GT(loc));
 }
 
 "++" {
   loc.columns(yyleng);
-  return C11Parser::make_INC(loc);
+  return checkToken(C11Parser::make_INC(loc));
 }
 
 -- {
   loc.columns(yyleng);
-  return C11Parser::make_DEC(loc);
+  return checkToken(C11Parser::make_DEC(loc));
 }
 
 -> {
   loc.columns(yyleng);
-  return C11Parser::make_PTR(loc);
+  return checkToken(C11Parser::make_PTR(loc));
 }
 
 "+" {
   loc.columns(yyleng);
-  return C11Parser::make_PLUS(loc);
+  return checkToken(C11Parser::make_PLUS(loc));
 }
 
 - {
   loc.columns(yyleng);
-  return C11Parser::make_MINUS(loc);
+  return checkToken(C11Parser::make_MINUS(loc));
 }
 
 "*" {
   loc.columns(yyleng);
-  return C11Parser::make_STAR(loc);
+  return checkToken(C11Parser::make_STAR(loc));
 }
 
 "/" {
   loc.columns(yyleng);
-  return C11Parser::make_SLASH(loc);
+  return checkToken(C11Parser::make_SLASH(loc));
 }
 
 % {
   loc.columns(yyleng);
-  return C11Parser::make_PERCENT(loc);
+  return checkToken(C11Parser::make_PERCENT(loc));
 }
 
 ! {
   loc.columns(yyleng);
-  return C11Parser::make_BANG(loc);
+  return checkToken(C11Parser::make_BANG(loc));
 }
 
 && {
   loc.columns(yyleng);
-  return C11Parser::make_ANDAND(loc);
+  return checkToken(C11Parser::make_ANDAND(loc));
 }
 
 "||" {
   loc.columns(yyleng);
-  return C11Parser::make_BARBAR(loc);
+  return checkToken(C11Parser::make_BARBAR(loc));
 }
 
 & {
   loc.columns(yyleng);
-  return C11Parser::make_AND(loc);
+  return checkToken(C11Parser::make_AND(loc));
 }
 
 "|" {
   loc.columns(yyleng);
-  return C11Parser::make_BAR(loc);
+  return checkToken(C11Parser::make_BAR(loc));
 }
 
 "^" {
   loc.columns(yyleng);
-  return C11Parser::make_HAT(loc);
+  return checkToken(C11Parser::make_HAT(loc));
 }
 
 "?" {
   loc.columns(yyleng);
-  return C11Parser::make_QUESTION(loc);
+  return checkToken(C11Parser::make_QUESTION(loc));
 }
 
 : {
   loc.columns(yyleng);
-  return C11Parser::make_COLON(loc);
+  return checkToken(C11Parser::make_COLON(loc));
 }
 
 ~ {
   loc.columns(yyleng);
-  return C11Parser::make_TILDE(loc);
+  return checkToken(C11Parser::make_TILDE(loc));
 }
 
 "{" {
   loc.columns(yyleng);
-  return C11Parser::make_LBRACE(loc);
+  return checkToken(C11Parser::make_LBRACE(loc));
 }
 
 "}" {
   loc.columns(yyleng);
-  return C11Parser::make_RBRACE(loc);
+  return checkToken(C11Parser::make_RBRACE(loc));
 }
 
 "[" {
   loc.columns(yyleng);
-  return C11Parser::make_LBRACK(loc);
+  return checkToken(C11Parser::make_LBRACK(loc));
 }
 
 "]" {
   loc.columns(yyleng);
-  return C11Parser::make_RBRACK(loc);
+  return checkToken(C11Parser::make_RBRACK(loc));
 }
 
 "(" {
   loc.columns(yyleng);
-  return C11Parser::make_LPAREN(loc);
+  return checkToken(C11Parser::make_LPAREN(loc));
 }
 
 ")" {
   loc.columns(yyleng);
-  return C11Parser::make_RPAREN(loc);
+  return checkToken(C11Parser::make_RPAREN(loc));
 }
 
 ; {
   loc.columns(yyleng);
-  return C11Parser::make_SEMICOLON(loc);
+  return checkToken(C11Parser::make_SEMICOLON(loc));
 }
 
 , {
   loc.columns(yyleng);
-  return C11Parser::make_COMMA(loc);
+  return checkToken(C11Parser::make_COMMA(loc));
 }
 
 "." {
   loc.columns(yyleng);
-  return C11Parser::make_DOT(loc);
+  return checkToken(C11Parser::make_DOT(loc));
 }
 
 _Alignas {
   loc.columns(yyleng);
-  return C11Parser::make_ALIGNAS(loc);
+  return checkToken(C11Parser::make_ALIGNAS(loc));
 }
 
 _Alignof {
   loc.columns(yyleng);
-  return C11Parser::make_ALIGNOF(loc);
+  return checkToken(C11Parser::make_ALIGNOF(loc));
 }
 
 _Atomic {
   loc.columns(yyleng);
-  return C11Parser::make_ATOMIC(loc);
+  return checkToken(C11Parser::make_ATOMIC(loc));
 }
 
 _Bool {
   loc.columns(yyleng);
-  return C11Parser::make_BOOL(loc);
+  return checkToken(C11Parser::make_BOOL(loc));
 }
 
 _Complex {
   loc.columns(yyleng);
-  return C11Parser::make_COMPLEX(loc);
+  return checkToken(C11Parser::make_COMPLEX(loc));
 }
 
 _Generic {
   loc.columns(yyleng);
-  return C11Parser::make_GENERIC(loc);
+  return checkToken(C11Parser::make_GENERIC(loc));
 }
 
 _Imaginary {
   loc.columns(yyleng);
-  return C11Parser::make_IMAGINARY(loc);
+  return checkToken(C11Parser::make_IMAGINARY(loc));
 }
 
 _Noreturn {
   loc.columns(yyleng);
-  return C11Parser::make_NORETURN(loc);
+  return checkToken(C11Parser::make_NORETURN(loc));
 }
 
 _Static_assert {
   loc.columns(yyleng);
-  return C11Parser::make_STATIC_ASSERT(loc);
+  return checkToken(C11Parser::make_STATIC_ASSERT(loc));
 }
 
 _Thread_local {
   loc.columns(yyleng);
-  return C11Parser::make_THREAD_LOCAL(loc);
+  return checkToken(C11Parser::make_THREAD_LOCAL(loc));
 }
 
 auto {
   loc.columns(yyleng);
-  return C11Parser::make_AUTO(loc);
+  return checkToken(C11Parser::make_AUTO(loc));
 }
 
 break {
   loc.columns(yyleng);
-  return C11Parser::make_BREAK(loc);
+  return checkToken(C11Parser::make_BREAK(loc));
 }
 
 case {
   loc.columns(yyleng);
-  return C11Parser::make_CASE(loc);
+  return checkToken(C11Parser::make_CASE(loc));
 }
 
 char {
   loc.columns(yyleng);
-  return C11Parser::make_CHAR(loc);
+  return checkToken(C11Parser::make_CHAR(loc));
 }
 
 const {
   loc.columns(yyleng);
-  return C11Parser::make_CONST(loc);
+  return checkToken(C11Parser::make_CONST(loc));
 }
 
 continue {
   loc.columns(yyleng);
-  return C11Parser::make_CONTINUE(loc);
+  return checkToken(C11Parser::make_CONTINUE(loc));
 }
 
 default {
   loc.columns(yyleng);
-  return C11Parser::make_DEFAULT(loc);
+  return checkToken(C11Parser::make_DEFAULT(loc));
 }
 
 do {
   loc.columns(yyleng);
-  return C11Parser::make_DO(loc);
+  return checkToken(C11Parser::make_DO(loc));
 }
 
 double {
   loc.columns(yyleng);
-  return C11Parser::make_DOUBLE(loc);
+  return checkToken(C11Parser::make_DOUBLE(loc));
 }
 
 else {
   loc.columns(yyleng);
-  return C11Parser::make_ELSE(loc);
+  return checkToken(C11Parser::make_ELSE(loc));
 }
 
 enum {
   loc.columns(yyleng);
-  return C11Parser::make_ENUM(loc);
+  return checkToken(C11Parser::make_ENUM(loc));
 }
 
 extern {
   loc.columns(yyleng);
-  return C11Parser::make_EXTERN(loc);
+  return checkToken(C11Parser::make_EXTERN(loc));
 }
 
 float {
   loc.columns(yyleng);
-  return C11Parser::make_FLOAT(loc);
+  return checkToken(C11Parser::make_FLOAT(loc));
 }
 
 for {
   loc.columns(yyleng);
-  return C11Parser::make_FOR(loc);
+  return checkToken(C11Parser::make_FOR(loc));
 }
 
 goto {
   loc.columns(yyleng);
-  return C11Parser::make_GOTO(loc);
+  return checkToken(C11Parser::make_GOTO(loc));
 }
 
 if {
   loc.columns(yyleng);
-  return C11Parser::make_IF(loc);
+  return checkToken(C11Parser::make_IF(loc));
 }
 
 inline {
   loc.columns(yyleng);
-  return C11Parser::make_INLINE(loc);
+  return checkToken(C11Parser::make_INLINE(loc));
 }
 
 int {
   loc.columns(yyleng);
-  return C11Parser::make_INT(loc);
+  return checkToken(C11Parser::make_INT(loc));
 }
 
 long {
   loc.columns(yyleng);
-  return C11Parser::make_LONG(loc);
+  return checkToken(C11Parser::make_LONG(loc));
 }
 
 register {
   loc.columns(yyleng);
-  return C11Parser::make_REGISTER(loc);
+  return checkToken(C11Parser::make_REGISTER(loc));
 }
 
 restrict {
   loc.columns(yyleng);
-  return C11Parser::make_RESTRICT(loc);
+  return checkToken(C11Parser::make_RESTRICT(loc));
 }
 
 return {
   loc.columns(yyleng);
-  return C11Parser::make_RETURN(loc);
+  return checkToken(C11Parser::make_RETURN(loc));
 }
 
 short {
   loc.columns(yyleng);
-  return C11Parser::make_SHORT(loc);
+  return checkToken(C11Parser::make_SHORT(loc));
 }
 
 signed {
   loc.columns(yyleng);
-  return C11Parser::make_SIGNED(loc);
+  return checkToken(C11Parser::make_SIGNED(loc));
 }
 
 sizeof {
   loc.columns(yyleng);
-  return C11Parser::make_SIZEOF(loc);
+  return checkToken(C11Parser::make_SIZEOF(loc));
 }
 
 static {
   loc.columns(yyleng);
-  return C11Parser::make_STATIC(loc);
+  return checkToken(C11Parser::make_STATIC(loc));
 }
 
 struct {
   loc.columns(yyleng);
-  return C11Parser::make_STRUCT(loc);
+  return checkToken(C11Parser::make_STRUCT(loc));
 }
 
 switch {
   loc.columns(yyleng);
-  return C11Parser::make_SWITCH(loc);
+  return checkToken(C11Parser::make_SWITCH(loc));
 }
 
 typedef {
   loc.columns(yyleng);
-  return C11Parser::make_TYPEDEF(loc);
+  return checkToken(C11Parser::make_TYPEDEF(loc));
 }
 
 union {
   loc.columns(yyleng);
-  return C11Parser::make_UNION(loc);
+  return checkToken(C11Parser::make_UNION(loc));
 }
 
 unsigned {
   loc.columns(yyleng);
-  return C11Parser::make_UNSIGNED(loc);
+  return checkToken(C11Parser::make_UNSIGNED(loc));
 }
 
 void {
   loc.columns(yyleng);
-  return C11Parser::make_VOID(loc);
+  return checkToken(C11Parser::make_VOID(loc));
 }
 
 volatile {
   loc.columns(yyleng);
-  return C11Parser::make_VOLATILE(loc);
+  return checkToken(C11Parser::make_VOLATILE(loc));
 }
 
 while {
   loc.columns(yyleng);
-  return C11Parser::make_WHILE(loc);
+  return checkToken(C11Parser::make_WHILE(loc));
 }
 
  /* first half of a split token, NAME TYPE or NAME VARIABLE */
  /* second half is returned after a lookup in S_IDENT state at the start of yylex */
 {identifier} {
   loc.columns(yyleng);
-  identifierToLookup = yytext;
-  BEGIN(S_IDENT);
-  return C11Parser::make_NAME(identifierToLookup, loc);
+  return checkToken(C11Parser::make_NAME(yytext, loc));
 }
 
  /* match newlines separately to correctly update line numbers */
@@ -786,7 +777,7 @@ while {
     loc.columns(yyleng);
     yy_pop_state();
     BEGIN(0);
-    return C11Parser::make_CONSTANT(loc);
+    return checkToken(C11Parser::make_CONSTANT(loc));
   }
 
 \n {
@@ -806,7 +797,7 @@ while {
     loc.columns(yyleng);
     yy_pop_state();
     BEGIN(0);
-    return C11Parser::make_STRING_LITERAL(loc);
+    return checkToken(C11Parser::make_STRING_LITERAL(loc));
   }
 \n {
     loc.lines();
