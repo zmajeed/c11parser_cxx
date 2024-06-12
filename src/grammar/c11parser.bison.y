@@ -115,7 +115,7 @@ struct BisonParam {
   } stats{};
 };
 
-// info for lexer to use
+// info for lexer to use in yylex
 struct LexParam {
 // position in input stream for lexer to update
   location loc{};
@@ -1011,6 +1011,7 @@ int main(int argc, char* argv[])
 {
   ios_base::sync_with_stdio(false);
 
+  bool atomicPermissiveSyntax = false;
   bool debug{};
   bool printStats{};
 
@@ -1018,6 +1019,7 @@ int main(int argc, char* argv[])
   string changefile;
 
   option opts[] = {
+    {"atomic-permissive-syntax", no_argument, (int*)&atomicPermissiveSyntax, 0},
     {"debug", no_argument, (int*)&debug, 1},
     {"stats", no_argument, (int*)&printStats, 1},
     {"help", no_argument, 0, 'h'},
@@ -1040,6 +1042,7 @@ int main(int argc, char* argv[])
   }
 
   Lexer lexer;
+  lexer.options = {.atomic_strict_syntax = !atomicPermissiveSyntax};
 
   BisonParam bisonParam;
   LexParam lexParam{.loc = location(&inputFilename)};

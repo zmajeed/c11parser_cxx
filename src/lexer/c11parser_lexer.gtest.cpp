@@ -40,7 +40,6 @@ using namespace ::testing;
 namespace c11parser::testing {
 
 using symbol_kind = C11Parser::symbol_kind;
-using token = C11Parser::token;
 
 TEST(Lexer, test_0) {
 
@@ -54,9 +53,9 @@ int main(void) {
   LexParam lexParam{};
 
   auto token = lexer.yylex(lexParam);
-  EXPECT_EQ(token.kind(), C11Parser::symbol_kind::S_INT);
+  EXPECT_EQ(token.kind(), symbol_kind::S_INT);
 
-  EXPECT_EQ(lexer.yylex(lexParam).kind(), C11Parser::symbol_kind::S_NAME);
+  EXPECT_EQ(lexer.yylex(lexParam).kind(), symbol_kind::S_NAME);
 }
 
 TEST(Lexer, test_1) {
@@ -68,6 +67,8 @@ int main(void) {
 )%");
 
   Lexer lexer(s);
+  lexer.options = {.atomic_strict_syntax = false};
+
   LexParam lexParam;
 
 // fake lexical feedback callback
@@ -79,10 +80,10 @@ int main(void) {
   };
 
   auto token = lexer.yylex(lexParam);
-  EXPECT_EQ(token.kind(), C11Parser::symbol_kind::S_INT);
+  EXPECT_EQ(token.kind(), symbol_kind::S_INT);
 
-  EXPECT_EQ(lexer.yylex(lexParam).kind(), C11Parser::symbol_kind::S_NAME);
-  EXPECT_EQ(lexer.yylex(lexParam).kind(), C11Parser::symbol_kind::S_VARIABLE);
+  EXPECT_EQ(lexer.yylex(lexParam).kind(), symbol_kind::S_NAME);
+  EXPECT_EQ(lexer.yylex(lexParam).kind(), symbol_kind::S_VARIABLE);
 }
 
 }

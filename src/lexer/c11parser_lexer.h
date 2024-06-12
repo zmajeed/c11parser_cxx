@@ -26,13 +26,23 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
+#include <string>
+
 #include "c11parser_guard_flexlexer.h"
 #include "c11parser.bison.h"
 
 namespace c11parser {
 using namespace std;
 
+struct LexerOptions {
+  bool atomic_strict_syntax = true;
+};
+
 class Lexer: public yyFlexLexer {
+public:
+
+  LexerOptions options{};
+
 public:
 
 // can only declare here since flex generates the implementation
@@ -49,7 +59,55 @@ private:
 private:
 
 // member variables for data needed across yylex calls
+
+  enum class lexer_state {
+    SRegular,
+    SAtomic,
+    SIdent,
+  } lexer_state = lexer_state::SRegular;
+
+// identifier to lookup and disambiguate between VARIABLE and TYPE tokens in next yylex call
   string identifierToLookup;
+
+private:
+
+  C11Parser::symbol_type checkToken(const C11Parser::symbol_type& token) {
+
+    using symbol_kind = C11Parser::symbol_kind;
+    constexpr auto S_NAME = symbol_kind::S_NAME;
+    constexpr auto S_LPAREN = symbol_kind::S_LPAREN;
+    constexpr auto S_ATOMIC = symbol_kind::S_ATOMIC;
+
+    constexpr auto SRegular = lexer_state::SRegular;
+    constexpr auto SAtomic = lexer_state::SAtomic;
+    constexpr auto SIdent = lexer_state::SIdent;
+
+    switch(lexer_state) {
+    case SAtomic:
+    case SRegular:
+
+      if(token.kind() == S_NAME) {
+        identifierToLookup = token.value.as<string>();
+        lexer_state = SIdent;
+        return token;
+      }
+      if(lexer_state == SAtomic && token.kind() == S_LPAREN) {
+        lexer_state = SRegular;
+        return C11Parser::make_ATOMIC_LPAREN(token.location);
+      }
+      if(token.kind() == S_ATOMIC) {
+        lexer_state = options.atomic_strict_syntax? SAtomic: SRegular;
+        return token;
+      }
+      lexer_state = SRegular;
+      return token;
+
+    default:
+      break;
+    }
+
+    throw C11Parser::syntax_error(token.location, "unexpected combination of lexer_state "s + to_string((int)lexer_state) + " and token " + to_string(token.kind()));
+  }
 
 };
 
