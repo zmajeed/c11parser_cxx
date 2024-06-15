@@ -322,6 +322,25 @@ void c11parser::C11Parser::error(const location& loc, const string& msg) {
 
 %token <string>                      NAME
 
+// GCC extensions
+
+%token                               GCC_ALIGNOF              "__alignof__"
+%token                               GCC_ASM                  "__asm__"
+%token                               GCC_ATTRIBUTE            "__attribute__"
+%token                               GCC_BUILTIN_OFFSETOF     "__builtin_offsetof"
+%token                               GCC_BUILTIN_VA_ARG       "__builtin_va_arg"
+%token                               GCC_BUILTIN_VA_LIST      "__builtin_va_list"
+%token                               GCC_EXTENSION            "__extension__"
+%token                               GCC_FLOAT32              "_Float32"
+%token                               GCC_FLOAT32X             "_Float32x"
+%token                               GCC_FLOAT64              "_Float64"
+%token                               GCC_FLOAT64X             "_Float64x"
+%token                               GCC_FLOAT128             "_Float128"
+%token                               GCC_INT128               "__int128"
+%token                               GCC_INLINE               "__inline"
+%token                               GCC_RESTRICT             "__restrict"
+%token                               GCC_SIGNED               "__signed__"
+
 // nonterminals
 
 %nterm <declarator>                  declarator
@@ -339,8 +358,14 @@ void c11parser::C11Parser::error(const location& loc, const string& msg) {
 
 %nterm <Context::context>            scoped_parameter_type_list_
 
+// %precedence order is lowest to highest going down
+// resolve dangling else shift-reduce conflict
 %precedence below_ELSE
 %precedence ELSE
+
+// resolve __attribute__ shift-reduce conflict
+%precedence below_GCC_ATTRIBUTE
+%precedence "__attribute__"
 
 // the start or root symbol of grammar
 %start translation_unit_file
@@ -348,12 +373,13 @@ void c11parser::C11Parser::error(const location& loc, const string& msg) {
 %%
 
 translation_unit_file:
-  external_declaration translation_unit_file
-| external_declaration YYEOF
+  external_declaration translation_unit_file postprocess
+| external_declaration YYEOF postprocess
 
 external_declaration:
   function_definition
 | declaration
+| gcc_external_declaration
 
 function_definition: function_definition1[ctx] option_declaration_list_ compound_statement {
   bisonParam.context.restore_context($ctx);
@@ -363,7 +389,7 @@ function_definition1: declaration_specifiers declarator_varname[d] {
   auto ctx = bisonParam.context.save_context();
   $d.reinstall_function_context(bisonParam.context);
   $$ = ctx;
-}
+} %prec below_GCC_ATTRIBUTE
 
 option_declaration_list_:
   %empty
@@ -425,10 +451,12 @@ init_declarator_list_declarator_varname_:
 init_declarator_declarator_typedefname_:
   declarator_typedefname
 | declarator_typedefname "=" c_initializer
+| gcc_init_declarator_declarator_typedefname_
 
 init_declarator_declarator_varname_:
   declarator_varname
 | declarator_varname "=" c_initializer
+| gcc_init_declarator_declarator_varname_
 
 declarator_varname: declarator[d] {
   bisonParam.context.declare_varname($d.identifier());
@@ -491,13 +519,15 @@ scoped_parameter_type_list_: save_context[ctx] parameter_type_list[x] {
 ;
 
 static_assert_declaration:
-  "_Static_assert" "(" constant_expression "," STRING_LITERAL ")" ";"
+  "_Static_assert" "(" constant_expression "," string_literal ")" ";"
 
 declaration_specifier:
   storage_class_specifier
 | type_qualifier
 | function_specifier
 | alignment_specifier
+// gcc extension, causes reduce-reduce conflict
+| gnu_attribute
 
 storage_class_specifier:
   "extern"
@@ -511,10 +541,12 @@ type_qualifier:
 | "restrict"
 | "volatile"
 | "_Atomic"
+| gcc_type_qualifier
 
 function_specifier:
   "inline"
 | "_Noreturn"
+| gcc_function_specifier
 
 alignment_specifier:
   "_Alignas" "(" type_name ")"
@@ -541,6 +573,7 @@ statement:
 | scoped_selection_statement_
 | scoped_iteration_statement_
 | jump_statement
+//| gcc_statement
 
 labeled_statement:
   general_identifier ":" statement
@@ -554,6 +587,8 @@ scoped_compound_statement_: save_context[ctx] compound_statement {
 
 expression_statement:
   option_expression_ ";"
+// gcc extension
+|  gnu_attributes ";"
 
 option_expression_:
   %empty
@@ -664,6 +699,7 @@ unary_expression:
 | "sizeof" unary_expression
 | "sizeof" "(" type_name ")"
 | "_Alignof" "(" type_name ")"
+| gcc_unary_expression
 
 unary_operator:
   "&"
@@ -686,9 +722,10 @@ postfix_expression:
 primary_expression:
   var_name
 | CONSTANT
-| STRING_LITERAL
+| string_literal
 | "(" expression ")"
 | generic_selection
+| gcc_primary_expression
 
 expression:
   assignment_expression
@@ -712,6 +749,10 @@ generic_assoc_list:
 generic_association:
   type_name ":" assignment_expression
 | "default" ":" assignment_expression
+
+string_literal:
+  STRING_LITERAL
+| string_literal STRING_LITERAL
 
 cast_expression:
   unary_expression
@@ -819,6 +860,7 @@ type_specifier_nonunique:
 | "unsigned"
 | "_Complex"
 | "_Imaginary"
+| gcc_type_specifier_nonunique
 
 type_specifier_unique:
   "void"
@@ -827,6 +869,7 @@ type_specifier_unique:
 | struct_or_union_specifier
 | enum_specifier
 | typedef_name_spec
+| gcc_type_specifier_unique
 
 struct_or_union_specifier:
   struct_or_union option_general_identifier_ "{" struct_declaration_list "}"
@@ -843,6 +886,7 @@ struct_declaration_list:
 struct_declaration:
   specifier_qualifier_list option_struct_declarator_list_ ";"
 | static_assert_declaration
+| gcc_extension_struct_declaration
 
 specifier_qualifier_list:
   list_eq1_type_specifier_unique___anonymous_0_
@@ -859,6 +903,7 @@ struct_declarator_list:
 struct_declarator:
   declarator
 | option_declarator_ ":" constant_expression
+| gcc_struct_declarator
 
 enum_specifier:
   "enum" option_general_identifier_ "{" enumerator_list option_COMMA_ "}"
@@ -968,12 +1013,210 @@ option___anonymous_2_:
   %empty
 | "," "..."
 
+// GCC GNU extensions
+
+/*
+from gcc c-parser.cc
+
+struct-declaration:
+  __extension__ struct-declaration
+  specifier-qualifier-list
+*/
+gcc_extension_struct_declaration:
+  "__extension__" struct_declaration
+
+/*
+from gcc c-parser.cc
+
+external-declaration:
+  asm-definition
+  ;
+  __extension__ external-declaration
+
+*/
+gcc_external_declaration:
+  "__extension__" external_declaration
+
+/*
+from c-family/c-common.cc
+
+{ "_Float32",         RID_FLOAT32,    0 },
+{ "_Float64",         RID_FLOAT64,    0 },
+{ "_Float128",        RID_FLOAT128,   0 },
+{ "__signed__",	RID_SIGNED,	0 },
+{ "__restrict",	RID_RESTRICT,	0 },
+{ "__inline",		RID_INLINE,	0 },
+{ "__builtin_va_arg",	RID_VA_ARG,	0 },
+{ "__builtin_offsetof", RID_OFFSETOF, 0 },
+*/
+gcc_type_specifier_nonunique:
+  "__signed__"
+| "__int128"
+| "_Float32"
+| "_Float32x"
+| "_Float64"
+| "_Float64x"
+| "_Float128"
+
+gcc_type_qualifier:
+  "__restrict"
+
+gcc_function_specifier:
+  "__inline"
+
+gcc_primary_expression:
+  "__builtin_va_arg" "(" assignment_expression "," type_name ")"
+| "__builtin_offsetof" "(" type_name "," offsetof_member_designator ")"
+
+/*
+from gcc c-family/c-common.cc
+
+lang_hooks.decls.pushdecl
+  (build_decl (UNKNOWN_LOCATION,
+  TYPE_DECL, get_identifier ("__builtin_va_list"),
+  va_list_type_node));
+*/
+gcc_type_specifier_unique:
+  "__builtin_va_list"
+
+/*
+from gcc c-parser.cc
+
+offsetof-member-designator:
+  identifier
+  offsetof-member-designator . identifier
+  offsetof-member-designator [ expression ]
+*/
+offsetof_member_designator:
+  general_identifier
+| offsetof_member_designator "." general_identifier
+| offsetof_member_designator "[" expression "]"
+
+/*
+from gcc c-parser.cc
+
+init-declarator:
+  declarator simple-asm-expr[opt] gnu-attributes[opt]
+  declarator simple-asm-expr[opt] gnu-attributes[opt] = initializer
+*/
+gcc_init_declarator_declarator_varname_:
+  declarator_varname gnu_attributes
+| declarator_varname gnu_attributes "=" c_initializer
+| declarator_varname simple_asm_expr
+| declarator_varname simple_asm_expr "=" c_initializer
+| declarator_varname simple_asm_expr gnu_attributes
+| declarator_varname simple_asm_expr gnu_attributes "=" c_initializer
+
+gcc_init_declarator_declarator_typedefname_:
+  declarator_typedefname gnu_attributes
+| declarator_typedefname gnu_attributes "=" c_initializer
+
+/*
+from gcc c-parser.cc
+
+gnu-attributes:
+  empty
+  gnu-attributes gnu-attribute
+
+gnu-attribute:
+  __attribute__ ( ( gnu-attribute-list ) )
+
+gnu-attribute-list:
+  gnu-attrib
+  gnu-attribute_list , gnu-attrib
+
+gnu-attrib:
+  empty
+  any-word
+  any-word ( gnu-attribute-arguments )
+
+where "any-word" may be any identifier (including one declared as a
+type), a reserved word storage class specifier, type specifier or
+type qualifier.  ??? This still leaves out most reserved keywords
+(following the old parser), shouldn't we include them?
+When EXPECT_COMMA is true, expect the attribute to be preceded
+by a comma and fail if it isn't.
+When EMPTY_OK is true, allow and consume any number of consecutive
+commas with no attributes in between.
+
+gnu-attribute-arguments:
+  identifier
+  identifier , nonempty-expr-list
+  expr-list
+
+where the "identifier" must not be declared as a type.  ??? Why not
+allow identifiers declared as types to start the arguments?
+*/
+gnu_attributes:
+  gnu_attribute
+| gnu_attributes gnu_attribute
+
+gnu_attribute:
+  "__attribute__" "(" "(" gnu_attribute_list ")" ")"
+
+gnu_attribute_list:
+  gnu_attrib
+| gnu_attribute_list "," gnu_attrib
+
+gnu_attrib:
+  general_identifier
+| general_identifier "(" gnu_attribute_arguments ")"
+
+gnu_attribute_arguments:
+  argument_expression_list
+
+/*
+from gcc c-parser.cc
+
+unary-expression:
+  __alignof__ unary-expression
+  __alignof__ ( type-name )
+  && identifier
+*/
+gcc_unary_expression:
+  "__alignof__" unary_expression
+| "__alignof__" "(" type_name ")"
+
+/*
+from gcc c-parser.cc
+
+struct-declarator:
+  declarator gnu-attributes[opt]
+  declarator[opt] : constant-expression gnu-attributes[opt]
+*/
+gcc_struct_declarator:
+  declarator gnu_attributes
+| option_declarator_ ":" constant_expression gnu_attributes
+
+/*
+from gcc c-parser.cc
+
+simple-asm-expr:
+  asm ( asm-string-literal )
+
+asm-string-literal:
+  string-literal
+*/
+simple_asm_expr:
+  "__asm__" "(" asm_string_literal ")"
+
+asm_string_literal:
+  string_literal
+
 // midrule actions
 
 save_context: %empty {
   $$ = bisonParam.context.save_context();
 }
 ;
+
+// midrule action for postprocessing
+postprocess: %empty {
+  auto& b = bisonParam;
+  auto& stats = b.stats;
+  stats.parseEndTime = steady_clock::now();
+  stats.parseTimeTakenSec = stats.parseEndTime - stats.parseStartTime;
+}
 
 %%
 
@@ -990,18 +1233,23 @@ save_context: %empty {
 #include <iostream>
 #include <optional>
 
+#include <fmt/format.h>
+
 #include "lexer/c11parser_lexer.h"
 #include "c11parser.bison.h"
 
 using namespace std;
+using namespace fmt;
 
 using namespace c11parser;
 
 void usage() {
-  puts("Usage: c11parse [-h | --help] [--debug]");
+  puts("Usage: c11parse [-h | --help] [--atomic-permissive-syntax] [--enable-gcc-extensions] [--debug]");
   puts("It prints nothing if input is valid, otherwise it prints an error message with line numbers");
   puts("");
   puts("Options:");
+  puts("--atomic-permissive-syntax: disables strict C18 syntax, off by default");
+  puts("--enable-gcc-extensions: enable GCC extensions to C, disabled by default");
   puts("--debug: turns on Bison parser and Flex lexer debug traces, off by default");
   puts("--stats: print timing stats on successful parse, off by default");
   puts("--help | -h: prints usage help");
@@ -1011,23 +1259,27 @@ int main(int argc, char* argv[])
 {
   ios_base::sync_with_stdio(false);
 
-  bool atomicPermissiveSyntax = false;
-  bool debug{};
-  bool printStats{};
+// getopt_long option variables must be int not bool or any other type convertible to int
+  int atomicPermissiveSyntax = 0;
+  int enableGccExtensions = 0;
+  int debug = 0;
+  int printStats = 0;
 
   auto inputFilename = "stdin"s;
   string changefile;
 
   option opts[] = {
-    {"atomic-permissive-syntax", no_argument, (int*)&atomicPermissiveSyntax, 0},
-    {"debug", no_argument, (int*)&debug, 1},
-    {"stats", no_argument, (int*)&printStats, 1},
+    {"atomic-permissive-syntax", no_argument, &atomicPermissiveSyntax, 1},
+    {"enable-gcc-extensions", no_argument, &enableGccExtensions, 1},
+    {"debug", no_argument, &debug, 1},
+    {"stats", no_argument, &printStats, 1},
     {"help", no_argument, 0, 'h'},
     {0, 0, 0, 0}
   };
 
   for(int i, optLetter; (optLetter = getopt_long(argc, argv, "h", opts, &i)) != -1;) {
     switch(optLetter) {
+// 0 means long option variable in opts entry was set to its value
     case 0:
       break;
     case 'h':
@@ -1037,12 +1289,15 @@ int main(int argc, char* argv[])
       usage();
       return 1;
     default:
-      break;
+      return 1;
     }
   }
 
   Lexer lexer;
-  lexer.options = {.atomic_strict_syntax = !atomicPermissiveSyntax};
+  lexer.options = {
+    .atomic_strict_syntax = !(bool)atomicPermissiveSyntax,
+    .enableGccExtensions = (bool)enableGccExtensions,
+  };
 
   BisonParam bisonParam;
   LexParam lexParam{.loc = location(&inputFilename)};
@@ -1063,7 +1318,6 @@ int main(int argc, char* argv[])
 
   if(printStats) {
     const auto& stats = bisonParam.stats;
-
     printf("parse_time %.9f sec\n", stats.parseTimeTakenSec.count());
   }
 

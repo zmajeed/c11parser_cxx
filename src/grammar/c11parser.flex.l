@@ -79,7 +79,7 @@ identifier_nondigit {nondigit}|{universal_character_name}
 identifier {identifier_nondigit}({identifier_nondigit}|{digit})*
 
  // whitespace
-whitespace_char_no_newline [ \t\012\r]
+whitespace_char_no_newline [ \t\v\r]
 
  // integer constants
 nonzero_digit [1-9]
@@ -223,7 +223,7 @@ preprocessor lines start with # or its digraph %:
 
 ([LuU]|u8)?["] {
   loc.columns(yyleng);
-  BEGIN(STRING_LITERAL);
+  yy_push_state(STRING_LITERAL);
 }
 
 {integer_constant} {
@@ -696,8 +696,138 @@ while {
   return checkToken(C11Parser::make_WHILE(loc));
 }
 
+ /* GCC GNU EXTENSIONS */
+
+__alignof__ {
+  loc.columns(yyleng);
+  if(!options.enableGccExtensions) {
+    throw C11Parser::syntax_error(loc, yytext + " requires GCC extensions be enabled"s);
+  }
+  return checkToken(C11Parser::make_GCC_ALIGNOF(loc));
+}
+
+__asm__ {
+  loc.columns(yyleng);
+  if(!options.enableGccExtensions) {
+    throw C11Parser::syntax_error(loc, yytext + " requires GCC extensions be enabled"s);
+  }
+  return checkToken(C11Parser::make_GCC_ASM(loc));
+}
+
+__attribute__ {
+  loc.columns(yyleng);
+  if(!options.enableGccExtensions) {
+    throw C11Parser::syntax_error(loc, yytext + " requires GCC extensions be enabled"s);
+  }
+  return checkToken(C11Parser::make_GCC_ATTRIBUTE(loc));
+}
+
+__builtin_offsetof {
+  loc.columns(yyleng);
+  if(!options.enableGccExtensions) {
+    throw C11Parser::syntax_error(loc, yytext + " requires GCC extensions be enabled"s);
+  }
+  return checkToken(C11Parser::make_GCC_BUILTIN_OFFSETOF(loc));
+}
+
+__builtin_va_arg {
+  loc.columns(yyleng);
+  if(!options.enableGccExtensions) {
+    throw C11Parser::syntax_error(loc, yytext + " requires GCC extensions be enabled"s);
+  }
+  return checkToken(C11Parser::make_GCC_BUILTIN_VA_ARG(loc));
+}
+
+__builtin_va_list {
+  loc.columns(yyleng);
+  if(!options.enableGccExtensions) {
+    throw C11Parser::syntax_error(loc, yytext + " requires GCC extensions be enabled"s);
+  }
+  return checkToken(C11Parser::make_GCC_BUILTIN_VA_LIST(loc));
+}
+
+__extension__ {
+  loc.columns(yyleng);
+  if(!options.enableGccExtensions) {
+    throw C11Parser::syntax_error(loc, yytext + " requires GCC extensions be enabled"s);
+  }
+  return checkToken(C11Parser::make_GCC_EXTENSION(loc));
+}
+
+_Float32x {
+  loc.columns(yyleng);
+  if(!options.enableGccExtensions) {
+    throw C11Parser::syntax_error(loc, yytext + " requires GCC extensions be enabled"s);
+  }
+  return checkToken(C11Parser::make_GCC_FLOAT32X(loc));
+}
+
+_Float32 {
+  loc.columns(yyleng);
+  if(!options.enableGccExtensions) {
+    throw C11Parser::syntax_error(loc, yytext + " requires GCC extensions be enabled"s);
+  }
+  return checkToken(C11Parser::make_GCC_FLOAT32(loc));
+}
+
+_Float64x {
+  loc.columns(yyleng);
+  if(!options.enableGccExtensions) {
+    throw C11Parser::syntax_error(loc, yytext + " requires GCC extensions be enabled"s);
+  }
+  return checkToken(C11Parser::make_GCC_FLOAT64X(loc));
+}
+
+_Float64 {
+  loc.columns(yyleng);
+  if(!options.enableGccExtensions) {
+    throw C11Parser::syntax_error(loc, yytext + " requires GCC extensions be enabled"s);
+  }
+  return checkToken(C11Parser::make_GCC_FLOAT64(loc));
+}
+
+_Float128 {
+  loc.columns(yyleng);
+  if(!options.enableGccExtensions) {
+    throw C11Parser::syntax_error(loc, yytext + " requires GCC extensions be enabled"s);
+  }
+  return checkToken(C11Parser::make_GCC_FLOAT128(loc));
+}
+
+__inline {
+  loc.columns(yyleng);
+  if(!options.enableGccExtensions) {
+    throw C11Parser::syntax_error(loc, yytext + " requires GCC extensions be enabled"s);
+  }
+  return checkToken(C11Parser::make_GCC_INLINE(loc));
+}
+
+__int128 {
+  loc.columns(yyleng);
+  if(!options.enableGccExtensions) {
+    throw C11Parser::syntax_error(loc, yytext + " requires GCC extensions be enabled"s);
+  }
+  return checkToken(C11Parser::make_GCC_INT128(loc));
+}
+
+__restrict {
+  loc.columns(yyleng);
+  if(!options.enableGccExtensions) {
+    throw C11Parser::syntax_error(loc, yytext + " requires GCC extensions be enabled"s);
+  }
+  return checkToken(C11Parser::make_GCC_RESTRICT(loc));
+}
+
+__signed__ {
+  loc.columns(yyleng);
+  if(!options.enableGccExtensions) {
+    throw C11Parser::syntax_error(loc, yytext + " requires GCC extensions be enabled"s);
+  }
+  return checkToken(C11Parser::make_GCC_SIGNED(loc));
+}
+
  /* first half of a split token, NAME TYPE or NAME VARIABLE */
- /* second half is returned after a lookup in S_IDENT state at the start of yylex */
+ /* second half is returned after a lookup at the start of yylex */
 {identifier} {
   loc.columns(yyleng);
   return checkToken(C11Parser::make_NAME(yytext, loc));
@@ -818,7 +948,6 @@ preprocessor lines look like
 {whitespace_char_no_newline}+{digit}*{whitespace_char_no_newline}*["][^\n"]*["].*\n |
 
 {whitespace_char_no_newline}*pragma{whitespace_char_no_newline}+.*\n {
-    loc.columns(yyleng - 1);
     loc.lines();
     BEGIN(INITIAL_LINEBEGIN);
   }
@@ -831,7 +960,11 @@ preprocessor lines look like
 
  /* catchall */
 <*>.|\n {
-  loc.columns(yyleng);
-  throw C11Parser::syntax_error(loc, "bad input \""s + yytext + "\""s);
+  if(*yytext == '\n') {
+    loc.lines();
+  } else {
+    loc.columns(yyleng);
+  }
+  throw C11Parser::syntax_error(loc, "bad input \""s + yytext + "\"" + " in flex state " + to_string((int)YY_START) + " lexer state " + to_string((int)lexer_state));
 
 }

@@ -36,6 +36,7 @@ using namespace std;
 
 struct LexerOptions {
   bool atomic_strict_syntax = true;
+  bool enableGccExtensions = false;
 };
 
 class Lexer: public yyFlexLexer {
@@ -60,6 +61,10 @@ private:
 
 // member variables for data needed across yylex calls
 
+// lexer states are the same as in the menhir/ocamllex lexer
+// these states could be implemented as flex start condition states
+// but I think it's nicer this way since there's no pattern matching involved
+// and they're really meant for logic before or after a token is matched
   enum class lexer_state {
     SRegular,
     SAtomic,
@@ -86,22 +91,30 @@ private:
     case SAtomic:
     case SRegular:
 
+// return first half of split token and prepare to send second half in next yylex call
       if(token.kind() == S_NAME) {
         identifierToLookup = token.value.as<string>();
         lexer_state = SIdent;
         return token;
       }
+
+// check state for returning special ATOMIC_LPAREN token instead of plain parentheses following _Atomic
       if(lexer_state == SAtomic && token.kind() == S_LPAREN) {
         lexer_state = SRegular;
         return C11Parser::make_ATOMIC_LPAREN(token.location);
       }
+
+// check strict C18 syntax option for how to handle possible parentheses after _Atomic
       if(token.kind() == S_ATOMIC) {
         lexer_state = options.atomic_strict_syntax? SAtomic: SRegular;
         return token;
       }
+
+// default is to return the matched token as-is
       lexer_state = SRegular;
       return token;
 
+// SIdent is the only other possible lexer state - it should never occur here since it is checked at yylex entry
     default:
       break;
     }
