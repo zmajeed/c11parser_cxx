@@ -522,7 +522,7 @@ void f(void) {
   bisonParam,
   lexParam);
 
-  println("test_info: test case explained in section 2.2.1 of paper"); 
+  println("test_info: test case explained in section 2.2.1 of paper");
   println("test_info: input is rejected by gcc-14: expected ; before x");
   EXPECT_NE(parser(), 0);
 }
@@ -1279,6 +1279,318 @@ typedef unsigned short int __u_short;
   Lexer lexer(s);
   BisonParam bisonParam;
   LexParam lexParam;
+
+  C11Parser parser([&lexer](LexParam& lexParam) -> C11Parser::symbol_type {
+    return lexer.yylex(lexParam);
+  },
+  bisonParam,
+  lexParam);
+
+  EXPECT_EQ(parser(), 0);
+}
+
+TEST(GCCParser, 1000_attribute_unused_variable) {
+  stringstream s(R"%(
+int x __attribute__((unused));
+)%");
+
+  Lexer lexer(s);
+  lexer.options = {.enableGccExtensions = true};
+  BisonParam bisonParam;
+  LexParam lexParam;
+
+  C11Parser parser([&lexer](LexParam& lexParam) -> C11Parser::symbol_type {
+    return lexer.yylex(lexParam);
+  },
+  bisonParam,
+  lexParam);
+
+  EXPECT_EQ(parser(), 0);
+}
+
+/*
+__attribute__ goes through
+
+external_declaration:
+  declaration
+
+declaration:
+  declaration_specifiers option_init_declarator_list_declarator_varname__ ";"
+
+declaration_specifiers:
+  list_ge1_type_specifier_nonunique_declaration_specifier_
+
+list_ge1_type_specifier_nonunique_declaration_specifier_:
+  declaration_specifier list_ge1_type_specifier_nonunique_declaration_specifier_
+
+declaration_specifier:
+  gnu_attribute
+
+*/
+TEST(GCCParser, 1004_attribute_before_function_name) {
+  stringstream s(R"%(
+static int __attribute__((noinline)) sqlite3VdbeHandleMovedCursor(VdbeCursor *p);
+)%");
+
+  Lexer lexer(s);
+  lexer.options = {.enableGccExtensions = true};
+  BisonParam bisonParam;
+  LexParam lexParam;
+
+// fake lexical feedback callback to verify VdbeCursor is a type
+  lexParam.is_typedefname = [](const string& s) {
+    if(s == "VdbeCursor") {
+      return true;
+    }
+    return false;
+  };
+
+  C11Parser parser([&lexer](LexParam& lexParam) -> C11Parser::symbol_type {
+    return lexer.yylex(lexParam);
+  },
+  bisonParam,
+  lexParam);
+
+  EXPECT_EQ(parser(), 0);
+}
+
+/*
+__attribute__ goes through
+
+external_declaration:
+  declaration
+
+declaration:
+  declaration_specifiers option_init_declarator_list_declarator_varname__ ";"
+
+init_declarator_list_declarator_varname_:
+  init_declarator_declarator_varname_
+
+init_declarator_declarator_varname_:
+  declarator_varname gnu_attributes
+*/
+TEST(GCCParser, 1010_attribute_after_function_name) {
+  stringstream s(R"%(
+extern int remove (const char *__filename) __attribute__ ((__nothrow__));
+)%");
+
+  Lexer lexer(s);
+  lexer.options = {.enableGccExtensions = true};
+  BisonParam bisonParam;
+  LexParam lexParam;
+
+  C11Parser parser([&lexer](LexParam& lexParam) -> C11Parser::symbol_type {
+    return lexer.yylex(lexParam);
+  },
+  bisonParam,
+  lexParam);
+
+  EXPECT_EQ(parser(), 0);
+}
+
+TEST(GCCParser, 1020_two_attributes_after_function_name) {
+  stringstream s(R"%(
+extern int remove (const char *__filename) __attribute__ ((__nothrow__ , __leaf__));
+)%");
+
+  Lexer lexer(s);
+  lexer.options = {.enableGccExtensions = true};
+  BisonParam bisonParam;
+  LexParam lexParam;
+
+  C11Parser parser([&lexer](LexParam& lexParam) -> C11Parser::symbol_type {
+    return lexer.yylex(lexParam);
+  },
+  bisonParam,
+  lexParam);
+
+  EXPECT_EQ(parser(), 0);
+}
+
+TEST(GCCParser, 1030_attribute_argument) {
+  stringstream s(R"%(
+extern int fclose (FILE *__stream) __attribute__ ((__nonnull__ (1)));
+)%");
+
+  Lexer lexer(s);
+  lexer.options = {.enableGccExtensions = true};
+  BisonParam bisonParam;
+  LexParam lexParam;
+
+  lexParam.is_typedefname = [](const string& s) {
+    if(s == "FILE") {
+      return true;
+    }
+    return false;
+  };
+
+  C11Parser parser([&lexer](LexParam& lexParam) -> C11Parser::symbol_type {
+    return lexer.yylex(lexParam);
+  },
+  bisonParam,
+  lexParam);
+
+  EXPECT_EQ(parser(), 0);
+}
+
+/*
+__attribute__ goes through
+
+struct_declaration:
+  specifier_qualifier_list option_struct_declarator_list_ ";"
+
+struct_declarator:
+  gcc_struct_declarator
+
+gcc_struct_declarator:
+  declarator gnu_attributes
+
+*/
+TEST(GCCParser, 1040_attribute_struct_field) {
+  stringstream s(R"%(
+typedef struct {
+  long long __max_align_ll __attribute__((__aligned__(__alignof__(long long))));
+} max_align_t;
+)%");
+
+  Lexer lexer(s);
+  lexer.options = {.enableGccExtensions = true};
+  BisonParam bisonParam;
+  LexParam lexParam;
+
+  C11Parser parser([&lexer](LexParam& lexParam) -> C11Parser::symbol_type {
+    return lexer.yylex(lexParam);
+  },
+  bisonParam,
+  lexParam);
+
+  EXPECT_EQ(parser(), 0);
+}
+
+/*
+__attribute__ goes through
+
+block_item:
+  statement
+
+statement:
+  expression_statement
+
+expression_statement:
+  gnu_attributes ";"
+*/
+TEST(GCCParser, 1050_attribute_assume_expression) {
+  stringstream s(R"%(
+void f() {
+  __attribute__((assume(786)));
+}
+)%");
+
+  Lexer lexer(s);
+  lexer.options = {.enableGccExtensions = true};
+  BisonParam bisonParam;
+  LexParam lexParam;
+
+  C11Parser parser([&lexer](LexParam& lexParam) -> C11Parser::symbol_type {
+    return lexer.yylex(lexParam);
+  },
+  bisonParam,
+  lexParam);
+
+  EXPECT_EQ(parser(), 0);
+}
+
+TEST(GCCParser, 1054_attribute_case_fallthrough) {
+  stringstream s(R"%(
+void f() {
+  switch( op ){
+    case 12:
+      op = 9 +1;
+  /* no break */ __attribute__((fallthrough));
+    case 7:
+      break;
+  }
+}
+)%");
+
+  Lexer lexer(s);
+  lexer.options = {.enableGccExtensions = true};
+  BisonParam bisonParam;
+  LexParam lexParam;
+
+  C11Parser parser([&lexer](LexParam& lexParam) -> C11Parser::symbol_type {
+    return lexer.yylex(lexParam);
+  },
+  bisonParam,
+  lexParam);
+
+  EXPECT_EQ(parser(), 0);
+}
+
+/*
+__asm__ goes through
+
+external_declaration:
+  declaration
+
+declaration:
+  declaration_specifiers option_init_declarator_list_declarator_varname__ ";"
+
+init_declarator_list_declarator_varname_:
+  init_declarator_declarator_varname_
+
+init_declarator_declarator_varname_:
+  gcc_init_declarator_declarator_varname_
+
+gcc_init_declarator_declarator_varname_:
+  declarator_varname simple_asm_expr gnu_attributes
+
+*/
+TEST(GCCParser, 1100_asm_attributes_after_function_name) {
+  stringstream s(R"%(
+extern FILE *tmpfile (void) __asm__ ("" "tmpfile64")
+  __attribute__ ((__malloc__)) __attribute__ ((__malloc__ (fclose, 1))) ;
+)%");
+
+  Lexer lexer(s);
+  lexer.options = {.enableGccExtensions = true};
+  BisonParam bisonParam;
+  LexParam lexParam;
+
+  lexParam.is_typedefname = [](const string& s) {
+    if(s == "FILE") {
+      return true;
+    }
+    return false;
+  };
+
+  C11Parser parser([&lexer](LexParam& lexParam) -> C11Parser::symbol_type {
+    return lexer.yylex(lexParam);
+  },
+  bisonParam,
+  lexParam);
+
+  EXPECT_EQ(parser(), 0);
+}
+
+TEST(GCCParser, 1110_asm_attributes_after_function_name) {
+  stringstream s(R"%(
+extern int sscanf (const char *__restrict __s, const char *__restrict __format, ...) __asm__ ("" "__isoc23_sscanf") __attribute__ ((__nothrow__ , __leaf__))
+
+                              ;
+)%");
+
+  Lexer lexer(s);
+  lexer.options = {.enableGccExtensions = true};
+  BisonParam bisonParam;
+  LexParam lexParam;
+
+  lexParam.is_typedefname = [](const string& s) {
+    if(s == "FILE") {
+      return true;
+    }
+    return false;
+  };
 
   C11Parser parser([&lexer](LexParam& lexParam) -> C11Parser::symbol_type {
     return lexer.yylex(lexParam);
