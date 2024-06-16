@@ -687,7 +687,7 @@ void {
   return checkToken(C11Parser::make_VOID(loc));
 }
 
-__volatile__|__volatile|volatile {
+volatile {
   loc.columns(yyleng);
   return checkToken(C11Parser::make_VOLATILE(loc));
 }
@@ -849,6 +849,14 @@ __signed__ {
     throw C11Parser::syntax_error(loc, yytext + " requires GCC extensions be enabled"s);
   }
   return checkToken(C11Parser::make_GCC_SIGNED(loc));
+}
+
+__volatile__|__volatile {
+  loc.columns(yyleng);
+  if(!options.enableGccExtensions) {
+    throw C11Parser::syntax_error(loc, yytext + " requires GCC extensions be enabled"s);
+  }
+  return checkToken(C11Parser::make_GCC_VOLATILE(loc));
 }
 
  /* first half of a split token, NAME TYPE or NAME VARIABLE */

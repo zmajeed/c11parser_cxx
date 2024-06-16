@@ -342,6 +342,7 @@ void c11parser::C11Parser::error(const location& loc, const string& msg) {
 %token                               GCC_INLINE               "__inline__"
 %token                               GCC_RESTRICT             "__restrict__"
 %token                               GCC_SIGNED               "__signed__"
+%token                               GCC_VOLATILE             "__volatile__"
 
 // nonterminals
 
@@ -453,11 +454,13 @@ init_declarator_list_declarator_varname_:
 init_declarator_declarator_typedefname_:
   declarator_typedefname
 | declarator_typedefname "=" c_initializer
+// gcc extension
 | gcc_init_declarator_declarator_typedefname_
 
 init_declarator_declarator_varname_:
   declarator_varname
 | declarator_varname "=" c_initializer
+// gcc extension
 | gcc_init_declarator_declarator_varname_
 
 declarator_varname: declarator[d] {
@@ -547,11 +550,13 @@ type_qualifier:
 | "restrict"
 | "volatile"
 | "_Atomic"
+// gcc extension
 | gcc_type_qualifier
 
 function_specifier:
   "inline"
 | "_Noreturn"
+// gcc extension
 | gcc_function_specifier
 
 alignment_specifier:
@@ -579,6 +584,7 @@ statement:
 | scoped_selection_statement_
 | scoped_iteration_statement_
 | jump_statement
+// gcc extension
 | gcc_asm_statement
 
 labeled_statement:
@@ -705,6 +711,7 @@ unary_expression:
 | "sizeof" unary_expression
 | "sizeof" "(" type_name ")"
 | "_Alignof" "(" type_name ")"
+// gcc extension
 | gcc_unary_expression
 
 unary_operator:
@@ -714,6 +721,7 @@ unary_operator:
 | "-"
 | "~"
 | "!"
+// gcc extension
 | gcc_unary_operator
 
 postfix_expression:
@@ -735,6 +743,7 @@ primary_expression:
 | string_literal
 | "(" expression ")"
 | generic_selection
+// gcc extension
 | gcc_primary_expression
 
 expression:
@@ -870,6 +879,7 @@ type_specifier_nonunique:
 | "unsigned"
 | "_Complex"
 | "_Imaginary"
+// gcc extension
 | gcc_type_specifier_nonunique
 
 type_specifier_unique:
@@ -879,6 +889,7 @@ type_specifier_unique:
 | struct_or_union_specifier
 | enum_specifier
 | typedef_name_spec
+// gcc extension
 | gcc_type_specifier_unique
 | gcc_struct_or_union_specifier
 
@@ -897,6 +908,7 @@ struct_declaration_list:
 struct_declaration:
   specifier_qualifier_list option_struct_declarator_list_ ";"
 | static_assert_declaration
+// gcc extension
 | gcc_extension_struct_declaration
 
 specifier_qualifier_list:
@@ -914,6 +926,7 @@ struct_declarator_list:
 struct_declarator:
   declarator
 | option_declarator_ ":" constant_expression
+// gcc extension
 | gcc_struct_declarator
 
 enum_specifier:
@@ -1078,6 +1091,7 @@ gcc_type_specifier_nonunique:
 
 gcc_type_qualifier:
   "__restrict__"
+| "__volatile__"
 
 gcc_function_specifier:
   "__inline__"
@@ -1377,6 +1391,7 @@ asm_qualifier:
   "volatile"
 | "inline"
 | "goto"
+| "__volatile__"
 
 /*
 from gcc c-parser.cc
