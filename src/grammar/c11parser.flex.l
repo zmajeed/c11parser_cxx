@@ -102,7 +102,8 @@ integer_constant {decimal_constant}{integer_suffix}?|{octal_constant}{integer_su
 sign [-+]
 
 digit_sequence {digit}+
-floating_suffix [flFL]
+ // C23 floating-point literal suffixes f16, f32, f64, f128, F16, F32, F64, F128
+floating_suffix [fF](16|32|64|128)?|[lL]
 
 fractional_constant {digit_sequence}?"."{digit_sequence}|{digit_sequence}"."
 exponent_part [eE]{sign}?{digit_sequence}
@@ -243,7 +244,7 @@ preprocessor lines start with # or its digraph %:
 
 {preprocessing_number} {
   loc.columns(yyleng);
-  throw C11Parser::syntax_error(loc, "these characters forma preprocessor number, but not a constant \""s + yytext + "\""s);
+  throw C11Parser::syntax_error(loc, "these characters form a preprocessor number, but not a constant \""s + yytext + "\""s);
 }
 
 "..." {
@@ -686,7 +687,7 @@ void {
   return checkToken(C11Parser::make_VOID(loc));
 }
 
-volatile {
+__volatile__|__volatile|volatile {
   loc.columns(yyleng);
   return checkToken(C11Parser::make_VOLATILE(loc));
 }
@@ -722,6 +723,14 @@ __attribute__ {
   return checkToken(C11Parser::make_GCC_ATTRIBUTE(loc));
 }
 
+__bf16 {
+  loc.columns(yyleng);
+  if(!options.enableGccExtensions) {
+    throw C11Parser::syntax_error(loc, yytext + " requires GCC extensions be enabled"s);
+  }
+  return checkToken(C11Parser::make_GCC_BF16(loc));
+}
+
 __builtin_offsetof {
   loc.columns(yyleng);
   if(!options.enableGccExtensions) {
@@ -752,6 +761,22 @@ __extension__ {
     throw C11Parser::syntax_error(loc, yytext + " requires GCC extensions be enabled"s);
   }
   return checkToken(C11Parser::make_GCC_EXTENSION(loc));
+}
+
+_Float16 {
+  loc.columns(yyleng);
+  if(!options.enableGccExtensions) {
+    throw C11Parser::syntax_error(loc, yytext + " requires GCC extensions be enabled"s);
+  }
+  return checkToken(C11Parser::make_GCC_FLOAT16(loc));
+}
+
+_Float32x {
+  loc.columns(yyleng);
+  if(!options.enableGccExtensions) {
+    throw C11Parser::syntax_error(loc, yytext + " requires GCC extensions be enabled"s);
+  }
+  return checkToken(C11Parser::make_GCC_FLOAT32X(loc));
 }
 
 _Float32x {
@@ -794,7 +819,7 @@ _Float128 {
   return checkToken(C11Parser::make_GCC_FLOAT128(loc));
 }
 
-__inline {
+__inline__|__inline {
   loc.columns(yyleng);
   if(!options.enableGccExtensions) {
     throw C11Parser::syntax_error(loc, yytext + " requires GCC extensions be enabled"s);
@@ -810,7 +835,7 @@ __int128 {
   return checkToken(C11Parser::make_GCC_INT128(loc));
 }
 
-__restrict {
+__restrict__|__restrict {
   loc.columns(yyleng);
   if(!options.enableGccExtensions) {
     throw C11Parser::syntax_error(loc, yytext + " requires GCC extensions be enabled"s);

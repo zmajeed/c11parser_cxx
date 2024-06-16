@@ -1339,11 +1339,27 @@ static int __attribute__((noinline)) sqlite3VdbeHandleMovedCursor(VdbeCursor *p)
 
 // fake lexical feedback callback to verify VdbeCursor is a type
   lexParam.is_typedefname = [](const string& s) {
-    if(s == "VdbeCursor") {
-      return true;
-    }
-    return false;
+    return s == "VdbeCursor";
   };
+
+  C11Parser parser([&lexer](LexParam& lexParam) -> C11Parser::symbol_type {
+    return lexer.yylex(lexParam);
+  },
+  bisonParam,
+  lexParam);
+
+  EXPECT_EQ(parser(), 0);
+}
+
+TEST(GCCParser, 1006_attribute_before_function_name) {
+  stringstream s(R"%(
+char *__attribute__((__nonnull__ (1))) basename (const char *) __asm__("" "__gnu_basename");
+)%");
+
+  Lexer lexer(s);
+  lexer.options = {.enableGccExtensions = true};
+  BisonParam bisonParam;
+  LexParam lexParam;
 
   C11Parser parser([&lexer](LexParam& lexParam) -> C11Parser::symbol_type {
     return lexer.yylex(lexParam);
@@ -1418,11 +1434,43 @@ extern int fclose (FILE *__stream) __attribute__ ((__nonnull__ (1)));
   LexParam lexParam;
 
   lexParam.is_typedefname = [](const string& s) {
-    if(s == "FILE") {
-      return true;
-    }
-    return false;
+    return s == "FILE";
   };
+
+  C11Parser parser([&lexer](LexParam& lexParam) -> C11Parser::symbol_type {
+    return lexer.yylex(lexParam);
+  },
+  bisonParam,
+  lexParam);
+
+  EXPECT_EQ(parser(), 0);
+}
+
+/*
+__attribute__ goes through
+
+init_declarator_declarator_typedefname_:
+  declarator_typedefname
+
+declarator_typedefname:
+  declarator[d]
+
+declarator:
+  direct_declarator[d]
+
+direct_declarator:
+  "(" save_context gnu_attributes declarator[d] ")"
+
+*/
+TEST(GCCParser, 1034_function_pointer_attribute) {
+  stringstream s(R"%(
+typedef void (__attribute__((__cdecl__)) * _PHNDLR)(int);
+)%");
+
+  Lexer lexer(s);
+  lexer.options = {.enableGccExtensions = true};
+  BisonParam bisonParam;
+  LexParam lexParam;
 
   C11Parser parser([&lexer](LexParam& lexParam) -> C11Parser::symbol_type {
     return lexer.yylex(lexParam);
@@ -1528,6 +1576,67 @@ void f() {
 }
 
 /*
+__attribute__ goes through
+
+gcc_struct_or_union_specifier:
+  struct_or_union gnu_attributes option_general_identifier_ "{" struct_declaration_list "}"
+
+*/
+TEST(GCCParser, 1060_struct_attribute) {
+  stringstream s(R"%(
+struct __attribute__ ((__aligned__ (16))) __mcontext
+{
+  __uint64_t p1home;
+};
+)%");
+
+  Lexer lexer(s);
+  lexer.options = {.enableGccExtensions = true};
+  BisonParam bisonParam;
+  LexParam lexParam;
+
+  lexParam.is_typedefname = [](const string& s) {
+    return s == "__uint64_t";
+  };
+
+  C11Parser parser([&lexer](LexParam& lexParam) -> C11Parser::symbol_type {
+    return lexer.yylex(lexParam);
+  },
+  bisonParam,
+  lexParam);
+
+  EXPECT_EQ(parser(), 0);
+}
+
+TEST(GCCParser, 1100_asm_statement) {
+  stringstream s(R"%(
+static __inline__ __uint32_t
+__ntohl(__uint32_t _x)
+{
+ __asm__("bswap %0" : "=r" (_x) : "0" (_x));
+ return _x;
+}
+)%");
+
+  Lexer lexer(s);
+  lexer.options = {.enableGccExtensions = true};
+  BisonParam bisonParam;
+  LexParam lexParam;
+
+  lexParam.is_typedefname = [](const string& s) {
+    return s == "__uint32_t";
+  };
+
+  C11Parser parser([&lexer](LexParam& lexParam) -> C11Parser::symbol_type {
+    return lexer.yylex(lexParam);
+  },
+  bisonParam,
+  lexParam);
+
+  EXPECT_EQ(parser(), 0);
+}
+
+/*
 __asm__ goes through
 
 external_declaration:
@@ -1546,7 +1655,7 @@ gcc_init_declarator_declarator_varname_:
   declarator_varname simple_asm_expr gnu_attributes
 
 */
-TEST(GCCParser, 1100_asm_attributes_after_function_name) {
+TEST(GCCParser, 1104_asm_attributes_after_function_name) {
   stringstream s(R"%(
 extern FILE *tmpfile (void) __asm__ ("" "tmpfile64")
   __attribute__ ((__malloc__)) __attribute__ ((__malloc__ (fclose, 1))) ;
@@ -1558,10 +1667,7 @@ extern FILE *tmpfile (void) __asm__ ("" "tmpfile64")
   LexParam lexParam;
 
   lexParam.is_typedefname = [](const string& s) {
-    if(s == "FILE") {
-      return true;
-    }
-    return false;
+    return s == "FILE";
   };
 
   C11Parser parser([&lexer](LexParam& lexParam) -> C11Parser::symbol_type {
@@ -1586,10 +1692,7 @@ extern int sscanf (const char *__restrict __s, const char *__restrict __format, 
   LexParam lexParam;
 
   lexParam.is_typedefname = [](const string& s) {
-    if(s == "FILE") {
-      return true;
-    }
-    return false;
+    return s == "FILE";
   };
 
   C11Parser parser([&lexer](LexParam& lexParam) -> C11Parser::symbol_type {
@@ -1599,6 +1702,150 @@ extern int sscanf (const char *__restrict __s, const char *__restrict __format, 
   lexParam);
 
   EXPECT_EQ(parser(), 0);
+}
+
+TEST(GCCParser, 1120_asm_volatile) {
+  stringstream s(R"%(
+void f() {
+  __asm__ __volatile__("int {$}3":);
+}
+)%");
+
+  Lexer lexer(s);
+  lexer.options = {.enableGccExtensions = true};
+  BisonParam bisonParam;
+  LexParam lexParam;
+
+  C11Parser parser([&lexer](LexParam& lexParam) -> C11Parser::symbol_type {
+    return lexer.yylex(lexParam);
+  },
+  bisonParam,
+  lexParam);
+
+  EXPECT_EQ(parser(), 0);
+}
+
+/*
+__extension__ goes through
+
+unary_operator:
+  gcc_unary_operator
+
+gcc_unary_operator:
+  "__extension__"
+
+*/
+TEST(GCCParser, 1200_return_extension) {
+  stringstream s(R"%(
+void f() {
+  return __extension__ (__m128){ 0.0f, 0.0f, 0.0f, 0.0f };
+}
+)%");
+
+  Lexer lexer(s);
+  lexer.options = {.enableGccExtensions = true};
+  BisonParam bisonParam;
+  LexParam lexParam;
+
+  lexParam.is_typedefname = [](const string& s) {
+    return s == "__m128";
+  };
+
+  C11Parser parser([&lexer](LexParam& lexParam) -> C11Parser::symbol_type {
+    return lexer.yylex(lexParam);
+  },
+  bisonParam,
+  lexParam);
+
+#if 0
+  lexer.set_debug(1);
+  parser.set_debug_level(1);
+#endif
+
+  EXPECT_EQ(parser(), 0);
+}
+
+/*
+__attribute__ goes through
+
+reduce (__attribute__((__vector_size__ (16))) int){4,1,2,3})
+postfix_expression:
+| "(" gnu_attribute type_name ")" "{" initializer_list option_COMMA_ "}"
+
+re4duce int
+type_name:
+  specifier_qualifier_list option_abstract_declarator_
+
+re4duce int
+option_abstract_declarator_:
+  %empty
+
+re4duce int
+specifier_qualifier_list:
+  list_ge1_type_specifier_nonunique___anonymous_1_
+
+re4duce int
+list_ge1_type_specifier_nonunique___anonymous_1_:
+  type_specifier_nonunique list___anonymous_1_
+
+reduce int
+list___anonymous_1_:
+  %empty
+
+reduce int
+type_specifier_nonunique:
+| "int"
+
+(__v4sf) cast goes through
+
+cast_expression:
+| "(" type_name ")" cast_expression
+
+*/
+TEST(GCCParser, 1210_return_extension_attribute) {
+  stringstream s(R"%(
+void f() {
+  return (__m128) __builtin_shuffle ((__v4sf)__A, (__v4sf)__B,
+                                     __extension__
+                                     (__attribute__((__vector_size__ (16))) int)
+                                     {4,1,2,3});
+}
+)%");
+
+  Lexer lexer(s);
+  lexer.options = {.enableGccExtensions = true};
+  BisonParam bisonParam;
+  LexParam lexParam;
+
+  lexParam.is_typedefname = [](const string& s) {
+    return s == "__m128" || s == "__v4sf";
+  };
+
+  C11Parser parser([&lexer](LexParam& lexParam) -> C11Parser::symbol_type {
+    return lexer.yylex(lexParam);
+  },
+  bisonParam,
+  lexParam);
+
+  EXPECT_EQ(parser(), 0);
+}
+
+TEST(C11Parser, 2000_null_statement_semicolon_outside_function) {
+  stringstream s(R"%(
+;
+)%");
+
+  Lexer lexer(s);
+  BisonParam bisonParam;
+  LexParam lexParam;
+
+  C11Parser parser([&lexer](LexParam& lexParam) -> C11Parser::symbol_type {
+    return lexer.yylex(lexParam);
+  },
+  bisonParam,
+  lexParam);
+
+  EXPECT_NE(parser(), 0) << "parse should fail similar to gcc error, ISO C does not allow extra ; outside of a function";
 }
 
 }
