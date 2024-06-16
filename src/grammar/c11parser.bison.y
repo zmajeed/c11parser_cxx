@@ -331,14 +331,16 @@ void c11parser::C11Parser::error(const location& loc, const string& msg) {
 %token                               GCC_BUILTIN_VA_ARG       "__builtin_va_arg"
 %token                               GCC_BUILTIN_VA_LIST      "__builtin_va_list"
 %token                               GCC_EXTENSION            "__extension__"
+%token                               GCC_BF16                 "__bf16"
+%token                               GCC_FLOAT16              "_Float16"
 %token                               GCC_FLOAT32              "_Float32"
 %token                               GCC_FLOAT32X             "_Float32x"
 %token                               GCC_FLOAT64              "_Float64"
 %token                               GCC_FLOAT64X             "_Float64x"
 %token                               GCC_FLOAT128             "_Float128"
 %token                               GCC_INT128               "__int128"
-%token                               GCC_INLINE               "__inline"
-%token                               GCC_RESTRICT             "__restrict"
+%token                               GCC_INLINE               "__inline__"
+%token                               GCC_RESTRICT             "__restrict__"
 %token                               GCC_SIGNED               "__signed__"
 
 // nonterminals
@@ -506,6 +508,10 @@ direct_declarator: general_identifier[i] {
 | direct_declarator[d] "(" save_context option_identifier_list_ ")" {
   $$ = other_declarator($d);
 }
+// gcc extension
+| "(" save_context gnu_attributes declarator[d] ")" {
+  $$ = move($d);
+}
 ;
 
 option_type_qualifier_list_:
@@ -573,7 +579,7 @@ statement:
 | scoped_selection_statement_
 | scoped_iteration_statement_
 | jump_statement
-//| gcc_statement
+| gcc_asm_statement
 
 labeled_statement:
   general_identifier ":" statement
@@ -708,6 +714,7 @@ unary_operator:
 | "-"
 | "~"
 | "!"
+| gcc_unary_operator
 
 postfix_expression:
   primary_expression
@@ -718,6 +725,9 @@ postfix_expression:
 | postfix_expression "++"
 | postfix_expression "--"
 | "(" type_name ")" "{" initializer_list option_COMMA_ "}"
+// gcc extension
+| gcc_postfix_expression
+
 
 primary_expression:
   var_name
@@ -870,6 +880,7 @@ type_specifier_unique:
 | enum_specifier
 | typedef_name_spec
 | gcc_type_specifier_unique
+| gcc_struct_or_union_specifier
 
 struct_or_union_specifier:
   struct_or_union option_general_identifier_ "{" struct_declaration_list "}"
@@ -936,6 +947,8 @@ option_pointer_: %empty | pointer
 
 type_qualifier_list:
   option_type_qualifier_list_ type_qualifier
+// gcc extension
+| gcc_type_qualifier_list
 
 parameter_type_list: parameter_list option___anonymous_2_ save_context[ctx] {
   $$ = move($ctx);
@@ -978,6 +991,9 @@ direct_abstract_declarator:
 | option_direct_abstract_declarator_ "[" "*" "]"
 | "(" option_scoped_parameter_type_list__ ")"
 | direct_abstract_declarator "(" option_scoped_parameter_type_list__ ")"
+// gcc extension
+| gcc_direct_abstract_declarator
+
 
 initializer_list:
   option_designation_ c_initializer
@@ -1044,25 +1060,27 @@ from c-family/c-common.cc
 { "_Float64",         RID_FLOAT64,    0 },
 { "_Float128",        RID_FLOAT128,   0 },
 { "__signed__",	RID_SIGNED,	0 },
-{ "__restrict",	RID_RESTRICT,	0 },
-{ "__inline",		RID_INLINE,	0 },
+{ "__restrict__",	RID_RESTRICT,	0 },
+{ "__inline__",		RID_INLINE,	0 },
 { "__builtin_va_arg",	RID_VA_ARG,	0 },
 { "__builtin_offsetof", RID_OFFSETOF, 0 },
 */
 gcc_type_specifier_nonunique:
   "__signed__"
 | "__int128"
+| "_Float16"
 | "_Float32"
 | "_Float32x"
 | "_Float64"
 | "_Float64x"
 | "_Float128"
+| "__bf16"
 
 gcc_type_qualifier:
-  "__restrict"
+  "__restrict__"
 
 gcc_function_specifier:
-  "__inline"
+  "__inline__"
 
 gcc_primary_expression:
   "__builtin_va_arg" "(" assignment_expression "," type_name ")"
@@ -1110,6 +1128,32 @@ gcc_init_declarator_declarator_varname_:
 gcc_init_declarator_declarator_typedefname_:
   declarator_typedefname gnu_attributes
 | declarator_typedefname gnu_attributes "=" c_initializer
+| declarator_typedefname simple_asm_expr
+| declarator_typedefname simple_asm_expr "=" c_initializer
+| declarator_typedefname simple_asm_expr gnu_attributes
+| declarator_typedefname simple_asm_expr gnu_attributes "=" c_initializer
+
+/*
+from gcc c-parser.cc
+
+direct-abstract-declarator:
+  ( gnu-attributes[opt] abstract-declarator )
+*/
+gcc_direct_abstract_declarator:
+  "(" save_context gnu_attributes abstract_declarator ")"
+
+/*
+from gcc c-parser.cc
+
+type-qualifier-list:
+  type-qualifier
+  gnu-attributes
+  type-qualifier-list type-qualifier
+  type-qualifier-list gnu-attributes
+
+*/
+gcc_type_qualifier_list:
+  option_type_qualifier_list_ gnu_attributes %prec below_GCC_ATTRIBUTE
 
 /*
 from gcc c-parser.cc
@@ -1147,6 +1191,7 @@ gnu-attribute-arguments:
 where the "identifier" must not be declared as a type.  ??? Why not
 allow identifiers declared as types to start the arguments?
 */
+
 gnu_attributes:
   gnu_attribute
 | gnu_attributes gnu_attribute
@@ -1180,6 +1225,16 @@ gcc_unary_expression:
 /*
 from gcc c-parser.cc
 
+unary-operator: one of
+  __extension__ __real__ __imag__
+
+*/
+gcc_unary_operator:
+  "__extension__"
+
+/*
+from gcc c-parser.cc
+
 struct-declarator:
   declarator gnu-attributes[opt]
   declarator[opt] : constant-expression gnu-attributes[opt]
@@ -1187,6 +1242,35 @@ struct-declarator:
 gcc_struct_declarator:
   declarator gnu_attributes
 | option_declarator_ ":" constant_expression gnu_attributes
+
+/*
+declaration-specifiers:
+  gnu-attributes declaration-specifiers[opt]
+
+*/
+
+/*
+gcc_declaration_specifiers:
+  gnu_attributes
+| gnu_attributes declaration_specifiers
+*/
+
+/*
+struct-or-union-specifier:
+  struct-or-union attribute-specifier-sequence[opt] gnu-attributes[opt] identifier[opt] { struct-contents } gnu-attributes[opt]
+  struct-or-union attribute-specifier-sequence[opt] gnu-attributes[opt] identifier
+
+*/
+
+gcc_struct_or_union_specifier:
+  struct_or_union gnu_attributes option_general_identifier_ "{" struct_declaration_list "}"
+
+/*
+gcc_struct_or_union_specifier:
+  struct_or_union option_general_identifier_ "{" struct_declaration_list "}" gnu_attributes
+  struct_or_union gnu_attributes option_general_identifier_ "{" struct_declaration_list "}"
+  struct_or_union gnu_attributes[opt] general_identifier[opt] "{" struct_contents "}" gnu_attributes[opt]
+*/
 
 /*
 from gcc c-parser.cc
@@ -1202,6 +1286,129 @@ simple_asm_expr:
 
 asm_string_literal:
   string_literal
+
+/*
+from gcc c-parser.cc
+
+asm-qualifier:
+  volatile
+  inline
+  goto
+
+asm-qualifier-list:
+  asm-qualifier-list asm-qualifier
+  asm-qualifier
+
+asm-statement:
+  asm asm-qualifier-list[opt] ( asm-argument ) ;
+
+asm-argument:
+  asm-string-literal
+  asm-string-literal : asm-operands[opt]
+  asm-string-literal : asm-operands[opt] : asm-operands[opt]
+  asm-string-literal : asm-operands[opt] : asm-operands[opt] : asm-clobbers[opt]
+  asm-string-literal : : asm-operands[opt] : asm-clobbers[opt] : asm-goto-operands
+
+asm-operands:
+  asm-operand
+  asm-operands , asm-operand
+
+asm-operand:
+  asm-string-literal ( expression )
+  [ identifier ] asm-string-literal ( expression )
+
+asm-clobbers:
+  asm-string-literal
+  asm-clobbers , asm-string-literal
+
+asm-goto-operands:
+  identifier
+  asm-goto-operands , identifier
+
+*/
+gcc_asm_statement:
+  asm_statement
+
+asm_statement:
+ "__asm__" "(" asm_argument ")" ";"
+| "__asm__" asm_qualifier_list "(" asm_argument ")" ";"
+
+asm_argument:
+  asm_string_literal
+| asm_string_literal ":"
+| asm_string_literal ":" ":"
+| asm_string_literal ":" ":" ":"
+| asm_string_literal ":" ":" ":" ":" asm_goto_operands
+| asm_string_literal ":" asm_operands
+| asm_string_literal ":" asm_operands ":"
+| asm_string_literal ":" asm_operands ":" ":"
+| asm_string_literal ":" asm_operands ":" ":" asm_clobbers
+| asm_string_literal ":" ":" asm_operands
+| asm_string_literal ":" ":" asm_operands ":"
+| asm_string_literal ":" asm_operands ":" asm_operands
+| asm_string_literal ":" asm_operands ":" asm_operands ":"
+| asm_string_literal ":" ":" asm_operands ":" asm_clobbers
+| asm_string_literal ":" asm_operands ":" asm_operands ":" asm_clobbers
+| asm_string_literal ":" ":" asm_operands ":" asm_clobbers ":" asm_goto_operands
+| asm_string_literal ":" ":" asm_operands ":" ":" asm_goto_operands
+| asm_string_literal ":" ":" ":" asm_clobbers ":" asm_goto_operands
+
+asm_operands:
+  asm_operand
+| asm_operands "," asm_operand
+
+asm_operand:
+  asm_string_literal "(" expression ")"
+| "[" general_identifier "]" asm_string_literal "(" expression ")"
+
+asm_clobbers:
+  asm_string_literal
+| asm_clobbers "," asm_string_literal
+
+asm_goto_operands:
+  general_identifier
+| asm_goto_operands "," general_identifier
+
+asm_qualifier_list:
+  asm_qualifier
+| asm_qualifier_list asm_qualifier
+
+asm_qualifier:
+  "volatile"
+| "inline"
+| "goto"
+
+/*
+from gcc c-parser.cc
+
+postfix-expression:
+  ( storage-class-specifiers[opt] type-name ) { initializer-list[opt] }
+  ( storage-class-specifiers[opt] type-name ) { initializer-list , }
+
+declaration-specifiers:
+  storage-class-specifier declaration-specifiers[opt]
+  gnu-attributes declaration-specifiers[opt]
+
+"Parse some declaration specifiers (possibly none) (C90 6.5, C99
+6.7, C11 6.7), adding them to SPECS (which may already include some).
+Storage class specifiers are accepted iff SCSPEC_OK; type
+specifiers are accepted iff TYPESPEC_OK; alignment specifiers are
+accepted iff ALIGNSPEC_OK; gnu-attributes are accepted at the start
+iff START_ATTR_OK; __auto_type is accepted iff AUTO_TYPE_OK.  In
+addition to the syntax shown, standard attributes are accepted at
+the start iff START_STD_ATTR_OK and at the end iff END_STD_ATTR_OK;
+unlike gnu-attributes, they are not accepted in the middle of the
+list.  (This combines various different syntax productions in the C
+standard, and in some cases gnu-attributes and standard attributes
+at the start may already have been parsed before this function is
+called.)"
+
+above comment indicates why gcc accepts gnu_attributes here, complete explanation must be in gcc code
+adding gnu_attributes to this very specific rule instead of the more generic declaration_specifiers rule avoids creating new conflicts
+*/
+
+gcc_postfix_expression:
+  "(" gnu_attributes type_name ")" "{" initializer_list option_COMMA_ "}"
 
 // midrule actions
 
