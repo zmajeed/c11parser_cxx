@@ -1311,20 +1311,21 @@ int x __attribute__((unused));
 /*
 __attribute__ goes through
 
-external_declaration:
-  declaration
-
 declaration:
   declaration_specifiers option_init_declarator_list_declarator_varname__ ";"
 
-declaration_specifiers:
-  list_ge1_type_specifier_nonunique_declaration_specifier_
+option_init_declarator_list_declarator_varname__:
+  init_declarator_list_declarator_varname_
 
-list_ge1_type_specifier_nonunique_declaration_specifier_:
-  declaration_specifier list_ge1_type_specifier_nonunique_declaration_specifier_
+init_declarator_list_declarator_varname_:
+  init_declarator_declarator_varname_
 
-declaration_specifier:
-  gnu_attribute
+init_declarator_declarator_varname_:
+  declarator_varname
+
+reduce __attribute__ sqlite3VdbeHandleMovedCursor
+declarator_varname:
+  gnu_attributes declarator[d] {
 
 */
 TEST(GCCParser, 1004_attribute_before_function_name) {
@@ -1351,7 +1352,105 @@ static int __attribute__((noinline)) sqlite3VdbeHandleMovedCursor(VdbeCursor *p)
   EXPECT_EQ(parser(), 0);
 }
 
-TEST(GCCParser, 1006_attribute_before_function_name) {
+/*
+__attribute__ goes through
+
+declaration:
+  declaration_specifiers option_init_declarator_list_declarator_varname__ ";"
+
+option_init_declarator_list_declarator_varname__:
+  init_declarator_list_declarator_varname_
+
+init_declarator_list_declarator_varname_:
+  init_declarator_declarator_varname_
+
+init_declarator_declarator_varname_:
+  declarator_varname
+
+declarator_varname:
+  declarator[d]
+
+declarator:
+  pointer direct_declarator[d]
+
+reduce char* __attribute__
+pointer:
+  "*" option_type_qualifier_list_ option_pointer_
+
+option_pointer_:
+  %empty
+
+reduce __attribute__
+option_type_qualifier_list_:
+  %empty
+
+reduce __attribute__
+type_qualifier_list:
+| gcc_type_qualifier_list
+
+reduce __attribute__
+gcc_type_qualifier_list:
+  option_type_qualifier_list_ gnu_attributes %prec below_GCC_ATTRIBUTE
+
+*/
+TEST(GCCParser, 1006_attribute_before_function_name_return_pointer) {
+  stringstream s(R"%(
+char *__attribute__((__nonnull__ (1))) basename (char);
+)%");
+
+  Lexer lexer(s);
+  lexer.options = {.enableGccExtensions = true};
+  BisonParam bisonParam;
+  LexParam lexParam;
+
+  C11Parser parser([&lexer](LexParam& lexParam) -> C11Parser::symbol_type {
+    return lexer.yylex(lexParam);
+  },
+  bisonParam,
+  lexParam);
+
+  EXPECT_EQ(parser(), 0);
+}
+
+/*
+__attribute__ and __asm__ go through
+
+pointer:
+  "*" option_type_qualifier_list_ option_pointer_
+
+option_pointer_:
+  %empty
+
+reduce __attribute__
+option_type_qualifier_list_:
+  %empty
+
+reduce __attribute__
+type_qualifier_list:
+| gcc_type_qualifier_list
+
+reduce __attribute__
+gcc_type_qualifier_list:
+  option_type_qualifier_list_ gnu_attributes %prec below_GCC_ATTRIBUTE
+
+reduce __asm__
+declaration:
+  declaration_specifiers option_init_declarator_list_declarator_varname__ ";"
+
+reduce __asm__
+init_declarator_declarator_varname_:
+  gcc_init_declarator_declarator_varname_
+
+reduce __asm__
+gcc_init_declarator_declarator_varname_:
+  declarator_varname simple_asm_expr
+
+reduce __asm__
+simple_asm_expr:
+  "__asm__" "(" asm_string_literal ")"
+
+*/
+TEST(GCCParser, 1008_attribute_before_function_name_asm_after_function_name) {
   stringstream s(R"%(
 char *__attribute__((__nonnull__ (1))) basename (const char *) __asm__("" "__gnu_basename");
 )%");
@@ -1756,11 +1855,6 @@ void f() {
   },
   bisonParam,
   lexParam);
-
-#if 0
-  lexer.set_debug(1);
-  parser.set_debug_level(1);
-#endif
 
   EXPECT_EQ(parser(), 0);
 }

@@ -467,13 +467,16 @@ declarator_varname: declarator[d] {
   bisonParam.context.declare_varname($d.identifier());
   $$ = move($d);
 }
-;
+// gcc extension
+| gnu_attributes declarator[d] {
+  bisonParam.context.declare_varname($d.identifier());
+  $$ = move($d);
+}
 
 declarator_typedefname: declarator[d] {
   bisonParam.context.declare_typedefname($d.identifier());
   $$ = move($d);
 }
-;
 
 option_declarator_:
   %empty
@@ -485,7 +488,6 @@ declarator: direct_declarator[d] {
 | pointer direct_declarator[d] {
   $$ = move($d);
 }
-;
 
 direct_declarator: general_identifier[i] {
   $$ = identifier_declarator{$i};
@@ -515,7 +517,6 @@ direct_declarator: general_identifier[i] {
 | "(" save_context gnu_attributes declarator[d] ")" {
   $$ = move($d);
 }
-;
 
 option_type_qualifier_list_:
   %empty
@@ -535,8 +536,6 @@ declaration_specifier:
 | type_qualifier
 | function_specifier
 | alignment_specifier
-// gcc extension, causes reduce-reduce conflict
-| gnu_attribute
 
 storage_class_specifier:
   "extern"
@@ -956,7 +955,9 @@ atomic_type_specifier:
 pointer:
   "*" option_type_qualifier_list_ option_pointer_
 
-option_pointer_: %empty | pointer
+option_pointer_:
+  %empty
+| pointer
 
 type_qualifier_list:
   option_type_qualifier_list_ type_qualifier
@@ -1258,18 +1259,8 @@ gcc_struct_declarator:
 | option_declarator_ ":" constant_expression gnu_attributes
 
 /*
-declaration-specifiers:
-  gnu-attributes declaration-specifiers[opt]
+from gcc c-parser.cc
 
-*/
-
-/*
-gcc_declaration_specifiers:
-  gnu_attributes
-| gnu_attributes declaration_specifiers
-*/
-
-/*
 struct-or-union-specifier:
   struct-or-union attribute-specifier-sequence[opt] gnu-attributes[opt] identifier[opt] { struct-contents } gnu-attributes[opt]
   struct-or-union attribute-specifier-sequence[opt] gnu-attributes[opt] identifier
@@ -1278,13 +1269,6 @@ struct-or-union-specifier:
 
 gcc_struct_or_union_specifier:
   struct_or_union gnu_attributes option_general_identifier_ "{" struct_declaration_list "}"
-
-/*
-gcc_struct_or_union_specifier:
-  struct_or_union option_general_identifier_ "{" struct_declaration_list "}" gnu_attributes
-  struct_or_union gnu_attributes option_general_identifier_ "{" struct_declaration_list "}"
-  struct_or_union gnu_attributes[opt] general_identifier[opt] "{" struct_contents "}" gnu_attributes[opt]
-*/
 
 /*
 from gcc c-parser.cc
