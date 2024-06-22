@@ -1119,10 +1119,12 @@ offsetof-member-designator:
   identifier
   offsetof-member-designator . identifier
   offsetof-member-designator [ expression ]
+
+identifier cannot be type_name so we use var_name instead of general_identifier
 */
 offsetof_member_designator:
-  general_identifier
-| offsetof_member_designator "." general_identifier
+  var_name
+| offsetof_member_designator "." var_name
 | offsetof_member_designator "[" expression "]"
 
 /*
@@ -1265,10 +1267,13 @@ struct-or-union-specifier:
   struct-or-union attribute-specifier-sequence[opt] gnu-attributes[opt] identifier[opt] { struct-contents } gnu-attributes[opt]
   struct-or-union attribute-specifier-sequence[opt] gnu-attributes[opt] identifier
 
+use var_name instead of general_identifier since identifier cannot be type_name
 */
 
 gcc_struct_or_union_specifier:
-  struct_or_union gnu_attributes option_general_identifier_ "{" struct_declaration_list "}"
+  //struct_or_union gnu_attributes option_general_identifier_ "{" struct_declaration_list "}"
+  struct_or_union gnu_attributes "{" struct_declaration_list "}"
+| struct_or_union gnu_attributes var_name "{" struct_declaration_list "}"
 
 /*
 from gcc c-parser.cc
@@ -1323,6 +1328,7 @@ asm-goto-operands:
   identifier
   asm-goto-operands , identifier
 
+use var_name instead of general_identifier for gcc identifier
 */
 gcc_asm_statement:
   asm_statement
@@ -1357,15 +1363,15 @@ asm_operands:
 
 asm_operand:
   asm_string_literal "(" expression ")"
-| "[" general_identifier "]" asm_string_literal "(" expression ")"
+| "[" var_name "]" asm_string_literal "(" expression ")"
 
 asm_clobbers:
   asm_string_literal
 | asm_clobbers "," asm_string_literal
 
 asm_goto_operands:
-  general_identifier
-| asm_goto_operands "," general_identifier
+  var_name
+| asm_goto_operands "," var_name
 
 asm_qualifier_list:
   asm_qualifier
